@@ -16,7 +16,7 @@ GitHub Actions 的 cron 在早间档经常漂移或被丢弃（9:20-9:45 窗口�
     2) HTTPS fetch origin（匿名可读，443 放行）
     3) reset --hard FETCH_HEAD 线性对齐（**禁用 rebase**）
     4) 在「云端最新 rps.json」基础上跑 auction 模式，只打竞价补丁
-    5) commit + push（SSH-over-443 优先；失败自动回退 HTTPS+PAT）
+    5) commit + push（SSH-over-443 → 22 端口真实 IP 直连；**不再回退 PAT**，全失败即报错）
     6) 若 push 因远端又有新提交被拒 → 重新对齐并重跑一次（最多 2 轮）
 
 用法
@@ -37,7 +37,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 KEY = ROOT.parent / ".workbuddy" / "github_a_share_deploy_key"
-TOKEN_FILE = Path.home() / ".workbuddy" / ".gh_token"
+# 2026-09-22：PAT 已失效（api.github.com/user 直连 401），回退路径已删除。
+# 不再读 ~/.workbuddy/.gh_token —— 死令牌回退会让 git 转交凭据助手 → 无人值守下永久挂起。
 HTTPS_URL = "https://github.com/yueling-buddy/ashare-momentum.git"
 SSH_URL = "ssh://git@ssh.github.com:443/yueling-buddy/ashare-momentum.git"
 BRANCH = "main"
@@ -79,13 +80,13 @@ def sh(args, cwd=ROOT, env=None, timeout=600_000, check=False):
     return r.returncode
 
 
-def resolve_ssh_ip():
-    """DoH 查 ssh.github.com 真实 IP（本机 DNS 被污染）。"""
+def resolve_ip(name: str):
+    """DoH 查 A 记录（本机 DNS 被污染，必须走 DoH；DoH 本身走 HTTPS，不受污染影响）。"""
     import json
     import urllib.request
 
-    for url in ("https://dns.google/resolve?name=ssh.github.com&type=A",
-                "https://cloudflare-dns.com/dns-query?name=ssh.github.com&type=A&ct=application/dns-json"):
+    for url in (f"https://dns.google/resolve?name={name}&type=A",
+                f"https://cloudflare-dns.com/dns-query?name={name}&type=A&ct=application/dns-json"):
         try:
             with urllib.request.urlopen(url, timeout=8) as f:
                 data = json.load(f)
@@ -97,8 +98,8 @@ def resolve_ssh_ip():
     return None
 
 
-def ssh_env() -> dict:
-    ip = resolve_ssh_ip()
+def ssh_env(hostname: str = "ssh.github.com") -> dict:
+    ip = resolve_ip(hostname)
     host_opt = f"-o HostName={ip} " if ip else ""
     ssh = SSH_BIN if Path(SSH_BIN).exists() else "ssh"
     env = os.environ.copy()
@@ -107,6 +108,9 @@ def ssh_env() -> dict:
         "-o BatchMode=yes -o ConnectTimeout=15"
         "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     )
+    # 关键：任何凭据交互都要立即失败，绝不进凭据助手（无人值守下会永久挂起）
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GCM_INTERACTIVE"] = "never"
     return env
 
 
@@ -157,20 +161,38 @@ def stage_and_commit() -> bool:
 
 
 def push() -> bool:
-    # 1) SSH-over-443
-    ssh_rc = sh(["git", "push", SSH_URL, f"HEAD:refs/heads/{BRANCH}"],
-                env=ssh_env(), timeout=300_000)
-    if ssh_rc == 0:
+    """两段式 SSH 推送（**无 PAT**）。
+
+    2026-09-22 复核：~/.workbuddy/.gh_token 的 PAT 已失效（api.github.com/user 直连 401，
+    同端点匿名访问仓库 200 → 令牌本身死了）。原先"SSH 失败 → 回退 HTTPS+PAT"是双向坑：
+    既推不上去，又会让 git 转交凭据助手，无人值守环境无终端可交互 → **进程永不退出**
+    （本任务实测被挂死 46 分钟）。故删除 PAT 回退，改为 443 → 22端口+真实IP 两段，
+    全失败立即返回 False（快速失败远优于静默挂起）。
+    """
+    # 1) SSH-over-443（+ DoH 真实 IP 绕 DNS 污染）—— 本机最稳的一条
+    if sh(["git", "push", SSH_URL, f"HEAD:refs/heads/{BRANCH}"],
+          env=ssh_env("ssh.github.com"), timeout=300_000) == 0:
         return True
-    print("SSH 推送失败，回退 HTTPS+PAT ...")
-    # 2) HTTPS + PAT 回退
-    if not TOKEN_FILE.is_file():
-        print(f"未找到 {TOKEN_FILE}，无法回退")
+    # 2) 回退：github.com:22 + DoH 真实 IP 直连（22 常被 RST，但值得一试）
+    ip = resolve_ip("github.com")
+    if not ip:
+        print("SSH（443）失败，且 DoH 未解析到 github.com → 放弃（不回退 PAT）。")
         return False
-    token = TOKEN_FILE.read_text(encoding="utf-8").strip()
-    url = f"https://x-access-token:{token}@github.com/yueling-buddy/ashare-momentum.git"
-    return sh(["git", "-c", "http.postBuffer=524288000", "-c", "http.version=HTTP/1.1",
-               "push", url, f"HEAD:refs/heads/{BRANCH}"], timeout=900_000) == 0
+    print(f"SSH（443）失败，改试 22 端口 + 真实 IP（{ip}）...")
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GCM_INTERACTIVE"] = "never"
+    env["GIT_SSH_COMMAND"] = (
+        f'"{SSH_BIN if Path(SSH_BIN).exists() else "ssh"}" -i "{KEY}" '
+        f"-o HostName={ip} -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "
+        "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    )
+    ok = sh(["git", "push", "ssh://git@github.com:22/yueling-buddy/ashare-momentum.git",
+             f"HEAD:refs/heads/{BRANCH}"], env=env, timeout=300_000) == 0
+    if ok:
+        return True
+    print("SSH 推送失败（已试 443 / 22+IP）。PAT 回退已移除（令牌 401 失效，回退只会挂死）。")
+    return False
 
 
 def main() -> None:
