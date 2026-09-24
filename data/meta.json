@@ -1,6 +1,6 @@
 {
   "asof": "2026-09-23",
-  "generated_at": "2026-09-24 09:35:53",
+  "generated_at": "2026-09-24 09:36:32",
   "quote_time": "2026-09-23 15:36:00",
   "count": 5006,
   "universe_count": 5014,
@@ -12,6 +12,6 @@
     "composite_rps": "0.3×RPS50 + 0.3×RPS120 + 0.4×RPS250",
     "fip": "sign(N日收益) × (下跌日数−上涨日数) / N"
   },
-  "auction_quote_time": "2026-09-24 09:35:53",
-  "auction_capture_at": "2026-09-24 09:35:53"
+  "auction_quote_time": "2026-09-24 09:36:44",
+  "auction_capture_at": "2026-09-24 09:36:32"
 }
