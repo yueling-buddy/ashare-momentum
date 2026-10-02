@@ -1,6 +1,6 @@
 {
   "asof": "2026-10-01",
-  "generated_at": "2026-10-02 09:34:00",
+  "generated_at": "2026-10-02 09:34:38",
   "quote_time": "2026-09-30 16:30:00",
   "count": 5005,
   "universe_count": 5012,
@@ -13,5 +13,5 @@
     "fip": "sign(N日收益) × (下跌日数−上涨日数) / N"
   },
   "auction_quote_time": "2026-09-30 16:30:00",
-  "auction_capture_at": "2026-10-02 09:34:00"
+  "auction_capture_at": "2026-10-02 09:34:38"
 }
