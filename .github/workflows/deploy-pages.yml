@@ -15,7 +15,10 @@ permissions:
 
 concurrency:
   group: pages-deploy
-  cancel-in-progress: false
+  # cancel-in-progress: true — 高频推送（本机每15分钟 + CI）下，排队中的旧部署会被
+  # 新请求挤掉却永远轮不到执行（2026-10-06 起站点冻结 3 天的根因）。改为取消进行中的
+  # 旧部署、保证最新一次总能跑完，站点始终落到最新数据。
+  cancel-in-progress: true
 
 jobs:
   deploy:
