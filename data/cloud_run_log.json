@@ -1,5 +1,5 @@
 {
-  "ts": "2026-11-02 22:32:03",
+  "ts": "2026-11-03 00:03:08",
   "host": "cloud",
   "spot_attempts": [
     {
@@ -10,8 +10,9 @@
   "spot_source": "sina_raw",
   "spot_rows": 5008,
   "mode": "intraday",
-  "stage": "written",
-  "asof": "2026-11-02",
-  "guard_skipped": false,
-  "n_records": 5006
+  "stage": "guard_skip",
+  "asof": "2026-10-30",
+  "published_asof": "2026-11-02",
+  "guard_skipped": true,
+  "note": "实时行情缺失，跳过写盘以防回退"
 }
