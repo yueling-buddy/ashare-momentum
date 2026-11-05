@@ -1,18 +1,17 @@
 {
-  "ts": "2026-11-05 00:32:26",
-  "host": "cloud",
+  "ts": "2026-11-05 09:42:12",
+  "host": "local",
   "spot_attempts": [
     {
       "src": "sina_raw",
-      "rows": 5007
+      "rows": 5004
     }
   ],
   "spot_source": "sina_raw",
-  "spot_rows": 5007,
-  "mode": "intraday",
-  "stage": "guard_skip",
-  "asof": "2026-10-30",
-  "published_asof": "2026-11-04",
-  "guard_skipped": true,
-  "note": "实时行情缺失，跳过写盘以防回退"
+  "spot_rows": 5004,
+  "mode": "auction",
+  "stage": "written",
+  "n_records": 5004,
+  "n_auction": 5002,
+  "n_pct_overwrite": 5002
 }
