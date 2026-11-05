@@ -1,15 +1,15 @@
 {
-  "ts": "2026-11-05 15:04:11",
+  "ts": "2026-11-05 15:59:42",
   "host": "cloud",
   "spot_attempts": [
     {
       "src": "sina_raw",
-      "rows": 5007
+      "rows": 5006
     }
   ],
   "spot_source": "sina_raw",
-  "spot_rows": 5007,
-  "mode": "close",
+  "spot_rows": 5006,
+  "mode": "intraday",
   "stage": "written",
   "asof": "2026-11-05",
   "guard_skipped": false,
