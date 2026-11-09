@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>A股业绩快速增长 · 全量筛选</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="favicon.png" type="image/png">
+<style>
+  :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--up:#d4380d;--down:#16a34a;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
+  .wrap{max-width:1360px;margin:0 auto;padding:30px 20px 60px;}
+  .crumb{font-size:13px;color:var(--muted);margin-bottom:6px;}
+  .crumb a{color:var(--accent);text-decoration:none;}
+  header h1{font-size:22px;font-weight:700;}
+  header p{color:var(--muted);font-size:13px;margin-top:4px;}
+  .block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;}
+  .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:6px;}
+  .fitem{display:flex;flex-direction:column;gap:3px;}
+  .fitem label{font-size:11px;color:var(--muted);}
+  .fitem .inp{display:flex;align-items:center;gap:4px;}
+  .fitem input{width:88px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;outline:none;}
+  .fitem input:focus{border-color:var(--accent);}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 12px;}
+  .bar input.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;}
+  .bar input.search:focus{border-color:var(--accent);}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;}
+  .btn.std{background:var(--accent);color:#fff;}
+  .btn.reset{background:#eef2f7;color:var(--ink);}
+  .btn.onlystd{background:#fff;color:var(--accent);border:1px solid var(--accent);}
+  .btn:hover{opacity:.9;}
+  .btn.info{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .descbox{display:none;margin:0 0 12px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;}
+  .dtitle{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+  .drow{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px;line-height:1.6;}
+  .drow:last-child{border-bottom:none;}
+  .drow b{flex:0 0 132px;font-weight:600;color:var(--ink);}
+  .drow span{flex:1;color:var(--muted);}
+  .cnt{font-size:13px;color:var(--accent);font-weight:600;margin-left:auto;}
+  .tablescroll{overflow-x:auto;max-height:72vh;overflow-y:auto;}
+  table{border-collapse:collapse;width:100%;font-size:13px;}
+  thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;cursor:pointer;user-select:none;}
+  thead th .ar{font-size:10px;color:#93c5fd;}
+  thead th .i{font-size:10px;color:#93c5fd;margin-left:4px;font-weight:400;}
+  thead th:hover{background:#dbeafe;}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left;}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+  tbody tr:hover{background:#f7fafd;}
+  .up{color:var(--up);font-weight:600;}
+  .na{color:var(--muted);}
+  .tagstd{display:inline-block;background:#fde8e8;color:var(--up);font-size:12px;padding:1px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;}
+  .note{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;}
+  code{background:#eef2f7;padding:1px 5px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长（全量筛选）</div>
+  <header>
+    <h1>A股业绩快速增长 · 全量筛选<span id="stdmark"></span></h1>
+    <p>高成长扫描 · 数据日期 __GGEN__ · 全量 __GTOTAL__ 只标的（含全部指标，可自由筛选）；一键套用「业绩快速增长标准」。</p>
+  </header>
+  <div class="block">
+    <div class="filters" id="filters">
+      <div class="fitem"><label>市值(亿) ≥</label><div class="inp"><input id="f_mcap_yi" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收均值(亿) ≥</label><div class="inp"><input id="f_rev_avg_yi" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利均值(万) ≥</label><div class="inp"><input id="f_np_avg_wan" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收增速均值% ≥</label><div class="inp"><input id="f_rev_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利增速均值% ≥</label><div class="inp"><input id="f_np_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收Q同比% ≥</label><div class="inp"><input id="f_rev_q_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利Q同比% ≥</label><div class="inp"><input id="f_np_q_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>EPS同比% ≥</label><div class="inp"><input id="f_eps_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>PE TTM ≥</label><div class="inp"><input id="f_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>PE TTM ≤</label><div class="inp"><input id="x_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
+    </div>
+    <div class="bar">
+      <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
+      <button class="btn std" onclick="oneClick()">⚡ 一键筛选（业绩快速增长标准）</button>
+      <button class="btn onlystd" onclick="onlyStd()">仅看标准达标</button>
+      <button class="btn reset" onclick="resetAll()">重置</button>
+      <button class="btn info" onclick="toggleDesc()">ⓘ 指标说明</button>
+      <span class="cnt" id="cnt"></span>
+    </div>
+    <div id="descbox" class="descbox"></div>
+    <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
+    <div class="note">
+      PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
+      口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
+      同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
+      去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
+      来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
+      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。
+    </div>
+  </div>
+</div>
+<script>
+const DATA = __GJSON__;
+const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
+const DESC = {
+  "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
+  "name": "证券简称，来自 rps.json；保留 XD（除息）等行情标记。",
+  "industry": "行业分类，来自 rps.json；用于搜索，不参与筛选计算。",
+  "mcap_yi": "总市值，单位亿元。腾讯行情 2026-11-09 实时快照（data/mcap.csv 已全量重建），非流通市值；一键标准中的 ≥50亿 判据。",
+  "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与一键标准，可用上方 PE 区间单独或叠加筛选。",
+  "rev_avg_yi": "近三个完整财年（2023/2024/2025）营业总收入的算术平均，单位亿元；业绩报表原始单位为元。",
+  "rev_yoy_avg": "近三年年报披露的营业总收入同比增长率的算术平均（%）；任一年缺失或无法计算则该项留空。",
+  "np_avg_wan": "近三个完整财年净利润的算术平均，单位万元；业绩报表原始单位为元。",
+  "np_yoy_avg": "近三年年报披露的净利润同比增长率的算术平均（%）；亏损、低基数或重组可能产生极端值，为披露口径原值。",
+  "rev_q_yoy": "最新季度（2026 三季报，1–9 月累计）营业总收入同比增长，取报表披露值。",
+  "np_q_yoy": "最新季度（2026 三季报，1–9 月累计）净利润同比增长，取报表披露值。",
+  "eps_yoy": "(2026Q3 累计 EPS − 2025Q3 累计 EPS) ÷ 2025Q3 累计 EPS ×100%；去年同期 EPS≤0 或缺失则无法判定、留空（约 21.6%）。"
+};
+const COLS = [
+  {k:"code", t:"代码"},
+  {k:"name", t:"名称"},
+  {k:"industry", t:"行业"},
+  {k:"mcap_yi", t:"市值(亿)", d:1},
+  {k:"pe_ttm", t:"PE TTM", d:2},
+  {k:"rev_avg_yi", t:"营收均值(亿)", d:1},
+  {k:"rev_yoy_avg", t:"营收增速均值%", d:1, up:true},
+  {k:"np_avg_wan", t:"净利均值(万)", d:1},
+  {k:"np_yoy_avg", t:"净利增速均值%", d:1, up:true},
+  {k:"rev_q_yoy", t:"营收Q同比%", d:1, up:true},
+  {k:"np_q_yoy", t:"净利Q同比%", d:1, up:true},
+  {k:"eps_yoy", t:"EPS同比%", d:1, up:true}
+];
+let sortKey=null, sortDir=-1;
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});
+}
+function fmt(v, d){
+  if(v===null||v===undefined||v==="") return null;
+  const n=Number(v);
+  return isNaN(n)?null:n.toFixed(d);
+}
+function buildHead(){
+  const tr=document.getElementById("thead");
+  tr.innerHTML = COLS.map(c=>{
+    let ar="";
+    if(sortKey===c.k) ar = sortDir<0 ? " ▼" : " ▲";
+    const tip = DESC[c.k] ? ' title="'+escHtml(DESC[c.k])+'"' : '';
+    return '<th data-k="'+c.k+'"'+tip+'>'+c.t+'<span class="i">ⓘ</span><span class="ar">'+ar+'</span></th>';
+  }).join("");
+  tr.querySelectorAll("th").forEach(function(th){
+    th.onclick=function(){
+      const k=th.getAttribute("data-k");
+      if(sortKey===k) sortDir=-sortDir; else {sortKey=k; sortDir=-1;}
+      buildHead(); apply();
+    };
+  });
+}
+function getMin(id){
+  const v=document.getElementById(id).value.trim();
+  if(v==="") return null;
+  const n=parseFloat(v);
+  return isNaN(n)?null:n;
+}
+function apply(){
+  const q=(document.getElementById("q").value||"").trim().toLowerCase();
+  const mins={
+    mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
+    np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
+    np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
+    np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy"),
+    pe_ttm:getMin("f_pe_ttm")
+  };
+  const maxs={pe_ttm:getMin("x_pe_ttm")};
+  let rows=DATA.filter(function(r){
+    for(const k in mins){ const m=mins[k]; if(m!=null && !(r[k]!=null && r[k]>=m)) return false; }
+    for(const k in maxs){ const m=maxs[k]; if(m!=null && !(r[k]!=null && r[k]<=m)) return false; }
+    if(q){ const t=(r.code+" "+(r.name||"")+" "+(r.industry||"")).toLowerCase(); if(t.indexOf(q)<0) return false; }
+    return true;
+  });
+  if(sortKey){
+    rows=rows.slice().sort(function(a,b){
+      let x=a[sortKey], y=b[sortKey];
+      if(x==null&&y==null) return 0;
+      if(x==null) return 1; if(y==null) return -1;
+      if(typeof x==="string"){ return x.localeCompare(y,"zh")*sortDir; }
+      return (x-y)*sortDir;
+    });
+  }
+  const tb=document.getElementById("tb");
+  tb.innerHTML = rows.map(function(r){
+    const tds=COLS.map(function(c){
+      const raw=r[c.k];
+      if(raw===null||raw===undefined||raw==="") return '<td class="na">—</td>';
+      const v = c.d ? fmt(raw, c.d) : escHtml(raw);
+      if(v===null) return '<td class="na">—</td>';
+      if(c.up) return '<td class="up">'+v+'</td>';
+      return '<td>'+v+'</td>';
+    }).join("");
+    return '<tr>'+tds+'</tr>';
+  }).join("");
+  document.getElementById("cnt").textContent='显示 '+rows.length+' / 共 '+DATA.length+' 只';
+}
+function oneClick(){
+  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
+  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
+  apply();
+}
+function onlyStd(){
+  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
+  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML='<span class="tagstd">标准达标</span>';
+  apply();
+}
+function resetAll(){
+  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm"].forEach(function(id){ document.getElementById(id).value=""; });
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML="";
+  apply();
+}
+function toggleDesc(){
+  const b=document.getElementById("descbox");
+  if(b.style.display==="block"){ b.style.display="none"; return; }
+  let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
+  h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
+  h+='<div class="drow"><b>一键标准</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内，可在标准之上叠加估值区间。点击一键按钮会清空 PE 条件。</span></div>';
+  b.innerHTML=h;
+  b.style.display="block";
+}
+buildHead();
+apply();
+</script>
+</body>
+</html>

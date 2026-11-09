@@ -58,170 +58,17 @@ def pct(v):
         return "—"
     return ("+%.1f" % v if v > 0 else "%.1f" % v) + "%"
 
-# ================= 高成长表格行 =================
-rows_html = []
-for r in growth_sel:
-    rev = fnum(r, "rev_yoy_avg")
-    npv = fnum(r, "np_yoy_avg")
-    rq = fnum(r, "rev_q_yoy")
-    nq = fnum(r, "np_q_yoy")
-    pe = fnum(r, "pe_ttm")
-    mcap = fnum(r, "mcap_yi")
-    rows_html.append(
-        "<tr>"
-        "<td class='code'>%s</td>"
-        "<td class='name'>%s</td>"
-        "<td class='ind'>%s</td>"
-        "<td class='num'>%s</td>"
-        "<td class='num %s'>%s</td>"
-        "<td class='num %s'>%s</td>"
-        "<td class='num %s'>%s</td>"
-        "<td class='num %s'>%s</td>"
-        "<td class='num'>%s</td>"
-        "</tr>" % (
-            r.get("code", ""), r.get("name", ""), r.get("industry", "") or "—",
-            ("%.1f" % mcap) if mcap is not None else "—",
-            color_cls(rev), pct(rev),
-            color_cls(npv), pct(npv),
-            color_cls(rq), pct(rq),
-            color_cls(nq), pct(nq),
-            ("%.1f" % pe) if pe is not None else "—",
-        )
-    )
-rows_html = "\n".join(rows_html)
-
-# 行业下拉选项（用于筛选框）
-industries = sorted({ (r.get("industry") or "") for r in growth_sel if r.get("industry") })
-ind_opts = "".join("<option value='%s'>%s</option>" % (i, i) for i in industries)
-
-# ================= growth.html =================
-CSS = """
-:root{
-  --bg:#f5f7fa; --card:#fff; --ink:#1f2937; --muted:#6b7280;
-  --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
-  --up:#dc2626; --down:#16a34a; --neu:#9ca3af;
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-     background:var(--bg);color:var(--ink);line-height:1.6;}
-.wrap{max-width:1180px;margin:0 auto;padding:30px 20px 60px;}
-header h1{font-size:24px;font-weight:700;}
-header p{color:var(--muted);margin-top:6px;font-size:14px;}
-.back{display:inline-block;margin:14px 0 4px;color:var(--accent);font-weight:600;
-      text-decoration:none;font-size:14px;}
-.note{background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;
-      padding:6px 11px;border-radius:8px;display:inline-block;margin-bottom:14px;}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
-       border-radius:12px;overflow:hidden;font-size:13px;}
-thead th{position:sticky;top:0;background:#f1f5f9;color:var(--ink);font-weight:700;
-         padding:10px 12px;text-align:left;cursor:pointer;user-select:none;white-space:nowrap;
-         border-bottom:2px solid var(--line);}
-thead th:hover{color:var(--accent);}
-tbody td{padding:9px 12px;border-bottom:1px solid var(--line);}
-tbody tr:hover{background:#f8fafc;}
-td.num{text-align:right;font-variant-numeric:tabular-nums;}
-td.code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted);}
-td.name{font-weight:600;}
-td.ind{color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.up{color:var(--up);font-weight:600;}
-.down{color:var(--down);font-weight:600;}
-.neu{color:var(--neu);}
-.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:6px 0 4px;}
-.filters label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);}
-.filters input,.filters select{border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;color:var(--ink);min-width:130px;}
-.filters input[type=number]{min-width:96px;}
-.filters button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;}
-.filters button.ghost{background:#fff;color:var(--accent);}
-.fcount{display:inline-block;margin:6px 0 2px;color:var(--muted);font-size:12px;font-weight:600;}
-footer{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;}
-"""
-
-growth_html = (
-    "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'>"
-    "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
-    "<title>高成长股票 · A股业绩快速增长</title>"
-    "<meta name='theme-color' content='#2563eb'>"
-    "<style>" + CSS + "</style></head><body><div class='wrap'>"
-    "<header><h1>🚀 高成长股票</h1>"
-    "<p>A股业绩快速增长扫描 · 数据源 growth_full.json（生成于 " + g_date + "）</p></header>"
-    "<a class='back' href='aggregate.html'>← 返回聚合页</a><br>"
-     "<span class='note'>筛选：营收同比均值 &gt; 20% 且 净利同比均值 &gt; 20%，按净利同比均值降序（最多 200 只）· 点击表头排序 · 下方可二次筛选</span>"
-     "<div class='filters'>"
-     "<label>关键词<input type='text' id='f_kw' placeholder='如 300641 / 正丹'></label>"
-     "<label>行业<select id='f_ind'><option value=''>全部行业</option>" + ind_opts + "</select></label>"
-     "<label>市值≥(亿)<input type='number' id='f_mcap' value='0' step='10' min='0'></label>"
-     "<label>营收同比%≥<input type='number' id='f_rev' value='0' step='5' min='0'></label>"
-     "<label>净利同比%≥<input type='number' id='f_np' value='0' step='50' min='0'></label>"
-     "<label>最新季净利%≥<input type='number' id='f_nq' value='0' step='10' min='0'></label>"
-     "<button class='ghost' id='f_reset' type='button'>重置</button>"
-     "</div>"
-     "<span class='fcount' id='fcount'></span>"
-     "<table id='gt'><thead><tr>"
-    "<th data-k='code'>代码</th><th data-k='name'>名称</th><th data-k='ind'>行业</th>"
-    "<th data-k='mcap' class='num'>市值(亿)</th>"
-    "<th data-k='rev' class='num'>营收同比%↑</th><th data-k='np' class='num'>净利同比%↑</th>"
-    "<th data-k='rq' class='num'>最新季营收同比%</th><th data-k='nq' class='num'>最新季净利同比%</th>"
-    "<th data-k='pe' class='num'>PE(TTM)</th>"
-    "</tr></thead><tbody>" + rows_html + "</tbody></table>"
-    "<footer>涨红跌绿（A股口径）：正增长标红、负增长标绿。本页为静态快照，数据更新后需重渲发布。<br>"
-    "共展示 " + str(len(growth_sel)) + " 只 / 全量 " + str(g_count) + " 只。</footer>"
-    "</div><script>"
-    "var tbl=document.getElementById('gt');"
-    "var tb=tbl.tBodies[0];"
-    "var order={};"
-    "tbl.querySelectorAll('thead th').forEach(function(th){"
-    "  th.onclick=function(){"
-    "    var k=th.dataset.k, asc=!order[k]; order={}; order[k]=asc;"
-    "    var rows=Array.prototype.slice.call(tb.rows);"
-    "    rows.sort(function(a,b){"
-    "      var x=a.cells[th.cellIndex].textContent, y=b.cells[th.cellIndex].textContent;"
-    "      if(k==='code'||k==='name'||k==='ind'){return asc?x.localeCompare(y,'zh'):y.localeCompare(x,'zh');}"
-    "      x=parseFloat(x.replace(/[^0-9.\\-]/g,''))||0; y=parseFloat(y.replace(/[^0-9.\\-]/g,''))||0;"
-    "      return asc?x-y:y-x;"
-    "    });"
-    "    rows.forEach(function(r){tb.appendChild(r);});"
-    "  };"
-    "});"
-    "function applyFilters(){"
-    "  var kw=document.getElementById('f_kw').value.trim().toLowerCase();"
-    "  var ind=document.getElementById('f_ind').value;"
-    "  var mcap=parseFloat(document.getElementById('f_mcap').value)||0;"
-    "  var rev=parseFloat(document.getElementById('f_rev').value)||0;"
-    "  var npf=parseFloat(document.getElementById('f_np').value)||0;"
-    "  var nq=parseFloat(document.getElementById('f_nq').value)||0;"
-    "  var shown=0;"
-    "  Array.prototype.slice.call(tb.rows).forEach(function(tr){"
-    "    var c=tr.children;"
-    "    var code=c[0].textContent.toLowerCase(), name=c[1].textContent.toLowerCase(), industry=c[2].textContent;"
-    "    var m=parseFloat(c[3].textContent.replace(/[^0-9.\\-]/g,''))||0;"
-    "    var rv=parseFloat(c[4].textContent.replace(/[^0-9.\\-]/g,''))||0;"
-    "    var npv=parseFloat(c[5].textContent.replace(/[^0-9.\\-]/g,''))||0;"
-    "    var nqv=parseFloat(c[7].textContent.replace(/[^0-9.\\-]/g,''))||0;"
-    "    var ok=true;"
-    "    if(kw && !(code.indexOf(kw)>=0||name.indexOf(kw)>=0)) ok=false;"
-    "    if(ind && industry!==ind) ok=false;"
-    "    if(m<mcap) ok=false;"
-    "    if(rv<rev) ok=false;"
-    "    if(npv<npf) ok=false;"
-    "    if(nqv<nq) ok=false;"
-    "    tr.style.display=ok?'':'none';"
-    "    if(ok) shown++;"
-    "  });"
-    "  document.getElementById('fcount').textContent='筛选后 '+shown+' 只';"
-    "}"
-    "['f_kw','f_mcap','f_rev','f_np','f_nq'].forEach(function(id){document.getElementById(id).addEventListener('input',applyFilters);});"
-    "document.getElementById('f_ind').addEventListener('change',applyFilters);"
-    "document.getElementById('f_reset').addEventListener('click',function(){"
-    "  document.getElementById('f_kw').value='';document.getElementById('f_ind').value='';"
-    "  document.getElementById('f_mcap').value=0;document.getElementById('f_rev').value=0;"
-    "  document.getElementById('f_np').value=0;document.getElementById('f_nq').value=0;"
-    "  applyFilters();"
-    "});"
-    "applyFilters();"
-    "</script></body></html>"
-)
+# ================= growth.html (full universe + filters + one-click std) =================
+# Rendered from growth_template.html so the full data table survives every rebuild.
+_gjson_js = json.dumps(gd, ensure_ascii=False).replace("</", "<\\/")
+with open(os.path.join(HERE, "growth_template.html"), encoding="utf-8") as f:
+    _tpl = f.read()
+_growth_html = (_tpl.replace("__GJSON__", _gjson_js)
+                    .replace("__GGEN__", str(g.get("generated_at", "")))
+                    .replace("__GTOTAL__", str(g_count)))
 with open(os.path.join(HERE, "growth.html"), "w", encoding="utf-8") as f:
-    f.write(growth_html)
+    f.write(_growth_html)
+
 
 CSS_PORTAL = """
 :root{
@@ -274,7 +121,7 @@ portal = (
     "<span class='tag pub'>公开</span><span class='go'>打开 →</span></a>"
     "<a class='card' href='growth.html' target='_blank' rel='noopener'>"
     "<div class='ico'>🚀</div><h3>高成长股票</h3>"
-    "<p>业绩快速增长扫描：营收/净利同比均值双增，按净利同比均值排序，含最新季度同比与 PE。</p>"
+    "<p>全量 A 股业绩数据 + 8 项阈值交互筛选，一键套用「高成长」标准；含 PE TTM 估值区间与指标口径速查。</p>"
     "<div class='meta'>全量 " + str(g_count) + " 只 · 净利/营收同比可排 · " + g_date + "</div>"
     "<span class='tag pub'>公开</span><span class='go'>打开 →</span></a>"
     "<a class='card' href='high-dividend/index.html' target='_blank' rel='noopener'>"
@@ -293,4 +140,4 @@ with open(os.path.join(HERE, "aggregate.html"), "w", encoding="utf-8") as f:
 print("OK -> aggregate.html (%d bytes), growth.html (%d bytes), growth rows=%d"
       % (os.path.getsize(os.path.join(HERE, "aggregate.html")),
          os.path.getsize(os.path.join(HERE, "growth.html")),
-         len(growth_sel)))
+         len(gd)))
