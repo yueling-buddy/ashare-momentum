@@ -21,6 +21,7 @@ PICK = os.path.join(DASH, "data", "pick_latest.json")
 DIV  = os.path.join(SCREEN, "高股息稳健资产_主表.csv")
 PRE  = os.path.join(SCREEN, "A股预选筛选结果_20261104.xlsx")
 GROWTH = os.path.join(SCREEN, "业绩快速增长企业_筛选结果.csv")
+GROWTH_JSON = os.path.join(SCREEN, "growth_full.json")
 OUT_PORTAL = os.path.join(DASH, "aggregate.html")
 OUT_PRE    = os.path.join(DASH, "prescreen.html")
 
@@ -57,8 +58,8 @@ def snapshots():
         out["div"] = "数据读取失败"
     out["pre"] = "2026-11-04 · 23 只 · 财务+动量综合预选"
     try:
-        gdf = pd.read_csv(GROWTH)
-        out["growth"] = f"{len(gdf)} 只 · 市值≥50亿 + 三年营收/净利双增≥20% + 最新季度三20%"
+        _gj = json.load(open(GROWTH_JSON, encoding="utf-8"))
+        out["growth"] = f"{_gj.get('count',0)} 只 · 全量可筛 · 一键标准：市值≥50亿+三年双增≥20%+最新季度三20%"
     except Exception:
         out["growth"] = "数据读取失败"
     out["mom"] = "全市场 RPS×FIP 动量排名 · 板块强度"
@@ -299,107 +300,209 @@ PRE_HTML = f"""<!DOCTYPE html>
 with open(OUT_PRE, "w", encoding="utf-8") as f:
     f.write(PRE_HTML)
 
-# ---------- 业绩快速增长子页 ----------
-def load_growth():
+# ---------- 业绩快速增长子页（全量 + 交互式筛选 + 一键标准） ----------
+def load_growth_full():
     try:
-        return pd.read_csv(GROWTH, dtype=str)
+        with open(GROWTH_JSON, encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
-        return pd.DataFrame()
+        return {"generated_at": "", "count": 0, "data": []}
 
-gdf = load_growth()
-gcols = [("code","代码"),("name","名称"),("industry","行业"),("mcap_yi","市值(亿)"),
-         ("rev_avg_yi","营收均值(亿)"),("rev_yoy_avg","营收增速均值%"),
-         ("np_avg_wan","净利均值(万)"),("np_yoy_avg","净利增速均值%"),
-         ("rev_q_yoy","营收Q同比%"),("np_q_yoy","净利Q同比%"),("eps_yoy","EPS同比%")]
-gth = "".join(f"<th>{esc(lbl)}</th>" for _, lbl in gcols)
-gtr = ""
-for _, r in gdf.iterrows():
-    tds = ""
-    for key, _ in gcols:
-        v = r.get(key)
-        if key in ("rev_yoy_avg","np_yoy_avg","rev_q_yoy","np_q_yoy","eps_yoy"):
-            tds += f'<td class="up">{fmt(v,1)}</td>'
-        elif key in ("mcap_yi","rev_avg_yi","np_avg_wan"):
-            tds += f"<td>{fmt(v,1)}</td>"
-        else:
-            tds += f"<td>{esc(v)}</td>"
-    gtr += f"<tr>{tds}</tr>"
+_gj = load_growth_full()
+_gdata = _gj.get("data", [])
+_ggen = _gj.get("generated_at", "") or "2026-11-09"
+_gtotal = _gj.get("count", 0)
+_gjson_js = json.dumps(_gdata, ensure_ascii=False).replace("</", "<\\/")
 
-gdate = "2026-11-09"
-gcnt = len(gdf)
-GROWTH_HTML = """<!DOCTYPE html>
+GROWTH_HTML = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>A股业绩快速增长企业</title>
+<title>A股业绩快速增长 · 全量筛选</title>
 <meta name="theme-color" content="#2563eb">
 <link rel="icon" href="favicon.png" type="image/png">
 <style>
   :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--up:#d4380d;--down:#16a34a;}
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
-  .wrap{max-width:1320px;margin:0 auto;padding:30px 20px 60px;}
+  .wrap{max-width:1360px;margin:0 auto;padding:30px 20px 60px;}
   .crumb{font-size:13px;color:var(--muted);margin-bottom:6px;}
   .crumb a{color:var(--accent);text-decoration:none;}
   header h1{font-size:22px;font-weight:700;}
   header p{color:var(--muted);font-size:13px;margin-top:4px;}
   .block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;}
-  .search{margin:6px 0 10px;display:flex;gap:10px;align-items:center;}
-  .search input{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;width:260px;outline:none;}
-  .search input:focus{border-color:var(--accent);}
-  .tablescroll{overflow-x:auto;max-height:78vh;overflow-y:auto;}
+  .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:6px;}
+  .fitem{display:flex;flex-direction:column;gap:3px;}
+  .fitem label{font-size:11px;color:var(--muted);}
+  .fitem .inp{display:flex;align-items:center;gap:4px;}
+  .fitem input{width:88px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;outline:none;}
+  .fitem input:focus{border-color:var(--accent);}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 12px;}
+  .bar input.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;}
+  .bar input.search:focus{border-color:var(--accent);}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;}
+  .btn.std{background:var(--accent);color:#fff;}
+  .btn.reset{background:#eef2f7;color:var(--ink);}
+  .btn.onlystd{background:#fff;color:var(--accent);border:1px solid var(--accent);}
+  .btn:hover{opacity:.9;}
+  .cnt{font-size:13px;color:var(--accent);font-weight:600;margin-left:auto;}
+  .tablescroll{overflow-x:auto;max-height:72vh;overflow-y:auto;}
   table{border-collapse:collapse;width:100%;font-size:13px;}
-  thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;}
+  thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;cursor:pointer;user-select:none;}
+  thead th .ar{font-size:10px;color:#93c5fd;}
   th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left;}
   td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
   tbody tr:hover{background:#f7fafd;}
   .up{color:var(--up);font-weight:600;}
-  .note{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.7;}
+  .na{color:var(--muted);}
+  .tagstd{display:inline-block;background:#fde8e8;color:var(--up);font-size:12px;padding:1px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;}
+  .note{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;}
   code{background:#eef2f7;padding:1px 5px;border-radius:4px;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长企业</div>
+  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长（全量筛选）</div>
   <header>
-    <h1>A股业绩快速增长企业</h1>
-    <p>高成长扫描 · 数据日期 __GDATE__ · 共 __GCNT__ 只（市值≥50亿 + 近三年营收/净利双增≥20% + 最新季度营收/净利/EPS 三项同比≥20%）</p>
+    <h1>A股业绩快速增长 · 全量筛选<span id="stdmark"></span></h1>
+    <p>高成长扫描 · 数据日期 __GGEN__ · 全量 __GTOTAL__ 只标的（含全部指标，可自由筛选）；一键套用「业绩快速增长标准」。</p>
   </header>
   <div class="block">
-    <div class="search"><input id="q" placeholder="搜索代码 / 名称…" oninput="filter()"><span id="cnt" style="font-size:12px;color:var(--muted)"></span></div>
-    <div class="tablescroll"><table><thead><tr>__GTH__</tr></thead><tbody id="tb">__GTR__</tbody></table></div>
+    <div class="filters" id="filters">
+      <div class="fitem"><label>市值(亿) ≥</label><div class="inp"><input id="f_mcap_yi" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收均值(亿) ≥</label><div class="inp"><input id="f_rev_avg_yi" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利均值(万) ≥</label><div class="inp"><input id="f_np_avg_wan" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收增速均值% ≥</label><div class="inp"><input id="f_rev_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利增速均值% ≥</label><div class="inp"><input id="f_np_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>营收Q同比% ≥</label><div class="inp"><input id="f_rev_q_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利Q同比% ≥</label><div class="inp"><input id="f_np_q_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>EPS同比% ≥</label><div class="inp"><input id="f_eps_yoy" type="number" step="any" placeholder="不限"></div></div>
+    </div>
+    <div class="bar">
+      <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
+      <button class="btn std" onclick="oneClick()">⚡ 一键筛选（业绩快速增长标准）</button>
+      <button class="btn onlystd" onclick="onlyStd()">仅看标准达标</button>
+      <button class="btn reset" onclick="resetAll()">重置</button>
+      <span class="cnt" id="cnt"></span>
+    </div>
+    <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
     <div class="note">
-      口径：市值取 <code>rps.json</code> 快照（asof 2026-11-06，已剔除 ST/退市）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
+      口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
       同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
       去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
-      来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。
+      来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
+      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。
     </div>
   </div>
 </div>
 <script>
-function filter(){
-  var q=document.getElementById('q').value.trim().toLowerCase();
-  var rows=document.querySelectorAll('#tb tr');var n=0;
-  rows.forEach(function(tr){
-    var t=tr.textContent.toLowerCase();
-    var show=!q||t.indexOf(q)>=0;
-    tr.style.display=show?'':'none';if(show)n++;
-  });
-  document.getElementById('cnt').textContent='显示 '+n+' / '+rows.length;
+const DATA = __GJSON__;
+const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
+const COLS = [
+  {k:"code", t:"代码"},
+  {k:"name", t:"名称"},
+  {k:"industry", t:"行业"},
+  {k:"mcap_yi", t:"市值(亿)", d:1},
+  {k:"rev_avg_yi", t:"营收均值(亿)", d:1},
+  {k:"rev_yoy_avg", t:"营收增速均值%", d:1, up:true},
+  {k:"np_avg_wan", t:"净利均值(万)", d:1},
+  {k:"np_yoy_avg", t:"净利增速均值%", d:1, up:true},
+  {k:"rev_q_yoy", t:"营收Q同比%", d:1, up:true},
+  {k:"np_q_yoy", t:"净利Q同比%", d:1, up:true},
+  {k:"eps_yoy", t:"EPS同比%", d:1, up:true}
+];
+let sortKey=null, sortDir=-1;
+function fmt(v, d){
+  if(v===null||v===undefined||(typeof v==="number"&&isNaN(v))) return null;
+  return Number(v).toFixed(d);
 }
-filter();
+function buildHead(){
+  const tr=document.getElementById("thead");
+  tr.innerHTML = COLS.map(c=>{
+    let ar="";
+    if(sortKey===c.k) ar = sortDir<0 ? " ▼" : " ▲";
+    return '<th data-k="'+c.k+'">'+c.t+'<span class="ar">'+ar+'</span></th>';
+  }).join("");
+  tr.querySelectorAll("th").forEach(function(th){
+    th.onclick=function(){
+      const k=th.getAttribute("data-k");
+      if(sortKey===k) sortDir=-sortDir; else {sortKey=k; sortDir=-1;}
+      buildHead(); apply();
+    };
+  });
+}
+function getMin(id){
+  const v=document.getElementById(id).value.trim();
+  if(v==="") return null;
+  const n=parseFloat(v);
+  return isNaN(n)?null:n;
+}
+function apply(){
+  const q=(document.getElementById("q").value||"").trim().toLowerCase();
+  const mins={
+    mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
+    np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
+    np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
+    np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy")
+  };
+  let rows=DATA.filter(function(r){
+    for(const k in mins){ const m=mins[k]; if(m!=null && !(r[k]!=null && r[k]>=m)) return false; }
+    if(q){ const t=(r.code+" "+(r.name||"")+" "+(r.industry||"")).toLowerCase(); if(t.indexOf(q)<0) return false; }
+    return true;
+  });
+  if(sortKey){
+    rows=rows.slice().sort(function(a,b){
+      let x=a[sortKey], y=b[sortKey];
+      if(x==null&&y==null) return 0;
+      if(x==null) return 1; if(y==null) return -1;
+      if(typeof x==="string"){ return x.localeCompare(y,"zh")*sortDir; }
+      return (x-y)*sortDir;
+    });
+  }
+  const tb=document.getElementById("tb");
+  tb.innerHTML = rows.map(function(r){
+    const tds=COLS.map(function(c){
+      const v=fmt(r[c.k], c.d||0);
+      if(v===null) return '<td class="na">—</td>';
+      if(c.up) return '<td class="up">'+v+'</td>';
+      return '<td>'+v+'</td>';
+    }).join("");
+    return '<tr>'+tds+'</tr>';
+  }).join("");
+  document.getElementById("cnt").textContent='显示 '+rows.length+' / 共 '+DATA.length+' 只';
+}
+function oneClick(){
+  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
+  apply();
+}
+function onlyStd(){
+  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML='<span class="tagstd">标准达标</span>';
+  apply();
+}
+function resetAll(){
+  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy"].forEach(function(id){ document.getElementById(id).value=""; });
+  document.getElementById("q").value="";
+  document.getElementById("stdmark").innerHTML="";
+  apply();
+}
+buildHead();
+apply();
 </script>
 </body>
 </html>
 """
-GROWTH_HTML = (GROWTH_HTML.replace("__GTH__", gth)
-                          .replace("__GTR__", gtr)
-                          .replace("__GCNT__", str(gcnt))
-                          .replace("__GDATE__", gdate))
+GROWTH_HTML = (GROWTH_HTML.replace("__GJSON__", _gjson_js)
+                           .replace("__GGEN__", _ggen)
+                           .replace("__GTOTAL__", str(_gtotal)))
 OUT_GROWTH = os.path.join(DASH, "growth.html")
 with open(OUT_GROWTH, "w", encoding="utf-8") as f:
     f.write(GROWTH_HTML)
+
 
 print("OK portal ->", OUT_PORTAL)
 print("OK prescreen ->", OUT_PRE)
