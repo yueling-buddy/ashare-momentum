@@ -1,560 +1,239 @@
 # -*- coding: utf-8 -*-
-"""生成 A股选股聚合门户（风格对齐 yueling-buddy.github.io/us-stock-portal）。
+"""生成 A股选股聚合门户 + 高成长股票子页。
 
-门户为链接卡片式入口（非内嵌大页）：顶部品牌 + 吸顶胶囊导航切换分组，
-每组模块以卡片呈现，点击在新标签页打开对应工具/子页。
-- 选股功能：选股盘 / 动量看板 / 高股息 / 预选筛选
-- 待拓展：净利润逐年 / 分红质量·再融资比 / 盘前盘后调度 / 聚合页自动刷新
-- 栏目：选股日报（盘前/盘中/盘后三档）
+数据源：
+  - 动量看板快照 : a-share-dashboard/data/meta.json
+  - 高成长       : ../_screen/growth_full.json
+  - 稳健股息     : ../_screen/高股息稳健资产_主表.csv
 
-同时生成 prescreen.html（预选筛选子页，自包含表格）。
-输出： a-share-dashboard/aggregate.html + prescreen.html
+输出：
+  - aggregate.html : 门户入口，选股功能 3 卡（动量看板 / 高成长股票 / 稳健股息票）
+  - growth.html    : 高成长股票明细表（按净利同比均值排序，涨红跌绿配色）
 """
-import os, json, csv, collections
-import pandas as pd
+import os, json, csv
+from collections import Counter
 
-ROOT = r"D:\Workbuddy Space\A股大作战"
-DASH = os.path.join(ROOT, "a-share-dashboard")
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)                 # A股大作战
 SCREEN = os.path.join(ROOT, "_screen")
+DATA = os.path.join(HERE, "data")
 
-PICK = os.path.join(DASH, "data", "pick_latest.json")
-DIV  = os.path.join(SCREEN, "高股息稳健资产_主表.csv")
-PRE  = os.path.join(SCREEN, "A股预选筛选结果_20261104.xlsx")
-GROWTH = os.path.join(SCREEN, "业绩快速增长企业_筛选结果.csv")
-GROWTH_JSON = os.path.join(SCREEN, "growth_full.json")
-OUT_PORTAL = os.path.join(DASH, "aggregate.html")
-OUT_PRE    = os.path.join(DASH, "prescreen.html")
+# ---------- 读取 ----------
+meta = json.load(open(os.path.join(DATA, "meta.json"), encoding="utf-8"))
+g = json.load(open(os.path.join(SCREEN, "growth_full.json"), encoding="utf-8"))
+div_rows = list(csv.DictReader(open(os.path.join(SCREEN, "高股息稳健资产_主表.csv"), encoding="utf-8-sig")))
 
-
-def esc(x):
-    s = "" if x is None else str(x)
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-def fmt(x, nd=2):
+def fnum(r, k):
+    v = r.get(k)
     try:
-        return f"{float(x):.{nd}f}"
-    except:
-        return esc(x)
-
-# ---------- 读取快照数据（仅用于卡片上的「最新快照」一行） ----------
-def snapshots():
-    out = {}
-    try:
-        P = json.load(open(PICK, encoding="utf-8"))
-        m = P["meta"]; dp = m.get("dpwd", {})
-        zone = dp.get("zone", "").split(" ")[0] or "—"
-        out["pick"] = f"快照 {esc(m.get('asof','-'))} · 候选 {m.get('n_pool','-')} 只 · DPWD {esc(zone)} (TEMP10 {fmt(dp.get('TEMP10','-'),1)})"
-    except Exception as e:
-        out["pick"] = "数据读取失败"
-    try:
-        rows = list(csv.DictReader(open(DIV, encoding="utf-8-sig")))
-        g = collections.Counter(r["稳健分级"] for r in rows)
-        def yld(r):
-            try: return float(r["TTM股息率(%)"])
-            except: return -1
-        top = max(rows, key=yld)
-        out["div"] = f"{len(rows)} 只 · 稳健核心 {g.get('稳健核心',0)} / 观察 {g.get('稳健观察',0)} · 最高 TTM 股息率 {fmt(top['TTM股息率(%)'],2)}%"
+        return float(v)
     except Exception:
-        out["div"] = "数据读取失败"
-    out["pre"] = "2026-11-04 · 23 只 · 财务+动量综合预选"
-    try:
-        _gj = json.load(open(GROWTH_JSON, encoding="utf-8"))
-        out["growth"] = f"{_gj.get('count',0)} 只 · 全量可筛 · 一键标准：市值≥50亿+三年双增≥20%+最新季度三20%"
-    except Exception:
-        out["growth"] = "数据读取失败"
-    out["mom"] = "全市场 RPS×FIP 动量排名 · 板块强度"
-    out["col"] = "每个交易日 10:00 / 10:30 / 14:00 三档发布"
-    return out
+        return None
 
-S = snapshots()
+gd = g["data"]
+# 高成长筛选：营收同比均值>20 且 净利同比均值>20，按净利同比均值降序，最多 200
+hi = [r for r in gd if (fnum(r, "np_yoy_avg") or -1e9) > 20 and (fnum(r, "rev_yoy_avg") or -1e9) > 20]
+hi.sort(key=lambda r: fnum(r, "np_yoy_avg"), reverse=True)
+if len(hi) < 30:
+    hi = [r for r in gd if fnum(r, "np_yoy_avg") is not None]
+    hi.sort(key=lambda r: fnum(r, "np_yoy_avg"), reverse=True)
+growth_sel = hi[:200]
 
-# ---------- 卡片 ----------
-def card(ico, title, desc, meta, href, tag, tagtype):
-    if href:
-        return (f'<a class="card" href="{esc(href)}" target="_blank" rel="noopener">'
-                f'<div class="ico">{ico}</div><h3>{esc(title)}</h3>'
-                f'<p>{esc(desc)}</p>'
-                f'<div class="meta">{esc(meta)}</div>'
-                f'<span class="tag {tagtype}">{esc(tag)}</span>'
-                f'<span class="go">打开 →</span></a>')
-    else:
-        return (f'<div class="card disabled">'
-                f'<div class="ico">{ico}</div><h3>{esc(title)}</h3>'
-                f'<p>{esc(desc)}</p>'
-                f'<div class="meta">{esc(meta)}</div>'
-                f'<span class="tag soon">敬请期待</span>'
-                f'<span class="go">即将上线</span></div>')
+grades = Counter(r["稳健分级"] for r in div_rows)
 
-tools_cards = "".join([
-    card("🔍", "A股选股盘", "盘中 RPS×FIP 选股日报：综合RPS>85 · FIP250≤0 · 市值>50亿 · 量比>1.5 等多重筛选，含 9 级漏斗与强势板块。",
-         S["pick"], "pick.html", "实时", "pub"),
-    card("📊", "动量看板", "全市场 RPS×FIP 动量排名、板块强度与个股强度分布的总看板。",
-         S["mom"], "index.html", "公开", "pub"),
-    card("💰", "高股息稳健资产", "854 只高股息扫描：稳健分级（核心/观察/一般）+ 连续分红、TTM 股息率、5 年累计派息率与分红质量。",
-         S["div"], "high-dividend/index.html", "公开", "pub"),
-    card("🧪", "预选筛选", "财务 + 动量综合预选：毛利率/净利率、营收与利润同比、分红率逐条判定。",
-         S["pre"], "prescreen.html", "公开", "pub"),
-    card("🚀", "业绩快速增长", "高成长扫描：近三年营收/净利同比增速均值均≥20%、规模达标，且最新季度营收/净利/EPS 同比三项均≥20%。",
-         S["growth"], "growth.html", "公开", "pub"),
-])
+m_asof = (meta.get("asof") or meta.get("generated_at") or "").split(" ")[0]
+m_count = meta.get("count", "")
+g_count = g.get("count", len(gd))
+g_date = str(g.get("generated_at", "")).split(" ")[0]
+div_total = len(div_rows)
 
-road_cards = "".join([
-    card("📈", "净利润逐年追踪", "2021–2025 业绩报表逐年净利润增速与复合增长看板。",
-         "数据就绪 · netprofit_yearly/ 已沉淀 2021–2025 业绩报表", None, "soon", "soon"),
-    card("🔁", "分红质量 · 再融资比", "纯回报型（未再融资）筛选：分红/再融资比 survivors 看板。",
-         "数据就绪 · bulk_financing.csv + f5_dividend_detail.csv", None, "soon", "soon"),
-    card("⏱️", "盘前 / 盘后调度", "选股日报当前为盘中快照；待建盘前预选 + 盘后回顾双频调度。",
-         "规划中", None, "soon", "soon"),
-    card("🔄", "聚合页自动刷新", "本门户为静态快照聚合；待建随各数据源刷新自动重渲并发布。",
-         "规划中", None, "soon", "soon"),
-])
+# ---------- 颜色（A股口径：涨红跌绿） ----------
+def color_cls(v):
+    if v is None:
+        return "neu"
+    return "up" if v > 0 else ("down" if v < 0 else "neu")
 
-cols_cards = "".join([
-    card("📰", "选股日报", "A股盘中选股日报栏目：每交易日 10:00 / 10:30 / 14:00 三档发布，含候选池与强势板块。",
-         S["col"], "pick.html", "公开", "pub"),
-])
+def pct(v):
+    if v is None:
+        return "—"
+    return ("+%.1f" % v if v > 0 else "%.1f" % v) + "%"
 
-# ---------- 门户 HTML ----------
-PORTAL = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>A股研究终端 · 聚合入口</title>
-<meta name="description" content="一个网址聚合全部 A股 选股工具与栏目：选股盘、动量看板、高股息、预选筛选。">
-<meta name="theme-color" content="#2563eb">
-<link rel="icon" href="favicon.png" type="image/png">
-<style>
-  :root{
-    --bg:#f5f7fa; --card:#ffffff; --ink:#1f2937; --muted:#6b7280;
-    --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
-    --green:#16a34a; --amber:#d97706; --gray:#9ca3af;
-    --violet:#7c3aed; --blue:#2563eb;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-       background:var(--bg);color:var(--ink);line-height:1.6;}
-  .wrap{max-width:1080px;margin:0 auto;padding:34px 20px 60px;}
-  header h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
-  header p{color:var(--muted);margin-top:6px;font-size:14px;}
-  nav{position:sticky;top:0;background:rgba(245,247,250,.92);backdrop-filter:blur(8px);
-      z-index:10;padding:14px 0;margin:22px 0 6px;border-bottom:1px solid var(--line);
-      display:flex;gap:10px;flex-wrap:wrap;}
-  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);
-      padding:8px 18px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:600;transition:.15s;}
-  nav button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .group{margin-top:26px;}
-  .group h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
-  .group h2 .cnt{font-size:12px;color:var(--muted);font-weight:400;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
-      text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px;
-      transition:.15s;position:relative;}
-  .card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(0,0,0,.08);border-color:var(--accent);}
-  .card .ico{font-size:26px;}
-  .card h3{font-size:17px;font-weight:700;}
-  .card p{font-size:13px;color:var(--muted);flex:1;}
-  .card .meta{font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-soft);
-      padding:5px 9px;border-radius:8px;line-height:1.4;}
-  .tag{align-self:flex-start;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
-  .tag.pub{background:#dcfce7;color:var(--green);}
-  .tag.local{background:#fef3c7;color:var(--amber);}
-  .tag.soon{background:#f3f4f6;color:var(--gray);}
-  .card .go{font-size:13px;color:var(--accent);font-weight:600;}
-  .card.disabled{opacity:.72;cursor:default;}
-  .card.disabled:hover{transform:none;box-shadow:none;border-color:var(--line);}
-  footer{margin-top:42px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
-  .hidden{display:none;}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>A股研究终端</h1>
-    <p>选股工具与定期栏目的统一入口 · 所有子工具在新标签页打开</p>
-  </header>
+# ================= 高成长表格行 =================
+rows_html = []
+for r in growth_sel:
+    rev = fnum(r, "rev_yoy_avg")
+    npv = fnum(r, "np_yoy_avg")
+    rq = fnum(r, "rev_q_yoy")
+    nq = fnum(r, "np_q_yoy")
+    pe = fnum(r, "pe_ttm")
+    mcap = fnum(r, "mcap_yi")
+    rows_html.append(
+        "<tr>"
+        "<td class='code'>%s</td>"
+        "<td class='name'>%s</td>"
+        "<td class='ind'>%s</td>"
+        "<td class='num'>%s</td>"
+        "<td class='num %s'>%s</td>"
+        "<td class='num %s'>%s</td>"
+        "<td class='num %s'>%s</td>"
+        "<td class='num %s'>%s</td>"
+        "<td class='num'>%s</td>"
+        "</tr>" % (
+            r.get("code", ""), r.get("name", ""), r.get("industry", "") or "—",
+            ("%.1f" % mcap) if mcap is not None else "—",
+            color_cls(rev), pct(rev),
+            color_cls(npv), pct(npv),
+            color_cls(rq), pct(rq),
+            color_cls(nq), pct(nq),
+            ("%.1f" % pe) if pe is not None else "—",
+        )
+    )
+rows_html = "\n".join(rows_html)
 
-  <nav>
-    <button data-g="tools" class="active">选股功能</button>
-    <button data-g="road">待拓展</button>
-    <button data-g="cols">栏目</button>
-  </nav>
-
-  <section class="group" id="g-tools">
-    <h2>选股功能 <span class="cnt">（5）</span></h2>
-    <div class="grid">__TOOLS__</div>
-  </section>
-
-  <section class="group hidden" id="g-road">
-    <h2>待拓展 <span class="cnt">（4）</span></h2>
-    <div class="grid">__ROAD__</div>
-  </section>
-
-  <section class="group hidden" id="g-cols">
-    <h2>栏目 <span class="cnt">（1）</span></h2>
-    <div class="grid">__COLS__</div>
-  </section>
-
-  <footer>
-    点击卡片会在新标签页打开对应工具或栏目；若某个功能卡片暂时打不开，刷新或稍后再试即可。<br>
-    收藏本页网址就够了，子工具地址更新时这里会自动保持最新。
-  </footer>
-</div>
-<script>
-document.querySelectorAll('nav button').forEach(function(b){
-  b.onclick=function(){
-    document.querySelectorAll('nav button').forEach(function(x){x.classList.remove('active');});
-    b.classList.add('active');
-    document.querySelectorAll('.group').forEach(function(g){g.classList.add('hidden');});
-    var el=document.getElementById('g-'+b.dataset.g); if(el) el.classList.remove('hidden');
-  };
-});
-</script>
-</body>
-</html>
+# ================= growth.html =================
+CSS = """
+:root{
+  --bg:#f5f7fa; --card:#fff; --ink:#1f2937; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
+  --up:#dc2626; --down:#16a34a; --neu:#9ca3af;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+     background:var(--bg);color:var(--ink);line-height:1.6;}
+.wrap{max-width:1180px;margin:0 auto;padding:30px 20px 60px;}
+header h1{font-size:24px;font-weight:700;}
+header p{color:var(--muted);margin-top:6px;font-size:14px;}
+.back{display:inline-block;margin:14px 0 4px;color:var(--accent);font-weight:600;
+      text-decoration:none;font-size:14px;}
+.note{background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;
+      padding:6px 11px;border-radius:8px;display:inline-block;margin-bottom:14px;}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+       border-radius:12px;overflow:hidden;font-size:13px;}
+thead th{position:sticky;top:0;background:#f1f5f9;color:var(--ink);font-weight:700;
+         padding:10px 12px;text-align:left;cursor:pointer;user-select:none;white-space:nowrap;
+         border-bottom:2px solid var(--line);}
+thead th:hover{color:var(--accent);}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--line);}
+tbody tr:hover{background:#f8fafc;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;}
+td.code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted);}
+td.name{font-weight:600;}
+td.ind{color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.up{color:var(--up);font-weight:600;}
+.down{color:var(--down);font-weight:600;}
+.neu{color:var(--neu);}
+footer{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;}
 """
-PORTAL = (PORTAL.replace("__TOOLS__", tools_cards)
-                 .replace("__ROAD__", road_cards)
-                 .replace("__COLS__", cols_cards))
-with open(OUT_PORTAL, "w", encoding="utf-8") as f:
-    f.write(PORTAL)
 
-# ---------- 预选筛选子页 ----------
-def load_prescreen():
-    import openpyxl
-    wb = openpyxl.load_workbook(PRE, read_only=True)
-    ws = wb[wb.sheetnames[0]]
-    it = ws.iter_rows(values_only=True)
-    hdr = [str(h) for h in next(it)]
-    rows = []
-    for row in it:
-        if row is None or all(c is None for c in row):
-            continue
-        rows.append({hdr[i]: (row[i] if i < len(row) else None) for i in range(len(hdr))})
-    return hdr, rows
+growth_html = (
+    "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
+    "<title>高成长股票 · A股业绩快速增长</title>"
+    "<meta name='theme-color' content='#2563eb'>"
+    "<style>" + CSS + "</style></head><body><div class='wrap'>"
+    "<header><h1>🚀 高成长股票</h1>"
+    "<p>A股业绩快速增长扫描 · 数据源 growth_full.json（生成于 " + g_date + "）</p></header>"
+    "<a class='back' href='aggregate.html'>← 返回聚合页</a><br>"
+    "<span class='note'>筛选：营收同比均值 &gt; 20% 且 净利同比均值 &gt; 20%，按净利同比均值降序（最多 200 只）· 点击表头排序</span>"
+    "<table id='gt'><thead><tr>"
+    "<th data-k='code'>代码</th><th data-k='name'>名称</th><th data-k='ind'>行业</th>"
+    "<th data-k='mcap' class='num'>市值(亿)</th>"
+    "<th data-k='rev' class='num'>营收同比%↑</th><th data-k='np' class='num'>净利同比%↑</th>"
+    "<th data-k='rq' class='num'>最新季营收同比%</th><th data-k='nq' class='num'>最新季净利同比%</th>"
+    "<th data-k='pe' class='num'>PE(TTM)</th>"
+    "</tr></thead><tbody>" + rows_html + "</tbody></table>"
+    "<footer>涨红跌绿（A股口径）：正增长标红、负增长标绿。本页为静态快照，数据更新后需重渲发布。<br>"
+    "共展示 " + str(len(growth_sel)) + " 只 / 全量 " + str(g_count) + " 只。</footer>"
+    "</div><script>"
+    "var tbl=document.getElementById('gt');"
+    "var tb=tbl.tBodies[0];"
+    "var order={};"
+    "tbl.querySelectorAll('thead th').forEach(function(th){"
+    "  th.onclick=function(){"
+    "    var k=th.dataset.k, asc=!order[k]; order={}; order[k]=asc;"
+    "    var rows=Array.prototype.slice.call(tb.rows);"
+    "    rows.sort(function(a,b){"
+    "      var x=a.cells[th.cellIndex].textContent, y=b.cells[th.cellIndex].textContent;"
+    "      if(k==='code'||k==='name'||k==='ind'){return asc?x.localeCompare(y,'zh'):y.localeCompare(x,'zh');}"
+    "      x=parseFloat(x.replace(/[^0-9.\\-]/g,''))||0; y=parseFloat(y.replace(/[^0-9.\\-]/g,''))||0;"
+    "      return asc?x-y:y-x;"
+    "    });"
+    "    rows.forEach(function(r){tb.appendChild(r);});"
+    "  };"
+    "});"
+    "</script></body></html>"
+)
+with open(os.path.join(HERE, "growth.html"), "w", encoding="utf-8") as f:
+    f.write(growth_html)
 
-hdr, rows = load_prescreen()
-show = ["代码","名称","细分行业","财务更新","市值(亿)","综合RPS","RPS50","毛利率%","净利率%","营收(亿)","营收同比%","利润同比%","三年分红率%","年数","备注"]
-show = [h for h in show if h in hdr]
-def chg_cls(x):
-    try:
-        f=float(x); return "up" if f>0 else ("down" if f<0 else "")
-    except: return ""
-th = "".join(f"<th>{esc(h)}</th>" for h in show)
-tr = ""
-for r in rows:
-    tds = ""
-    for h in show:
-        v = r.get(h)
-        if h in ("综合RPS","RPS50"): tds += f"<td>{fmt(v,2)}</td>"
-        elif h in ("营收同比%","利润同比%","毛利率%","净利率%"): tds += f'<td class="{chg_cls(v)}">{fmt(v,1)}</td>'
-        elif h == "备注": tds += f'<td class="rem">{esc(v)}</td>'
-        else: tds += f"<td>{esc(v)}</td>"
-    tr += f"<tr>{tds}</tr>"
-
-PRE_HTML = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>A股预选筛选结果</title>
-<meta name="theme-color" content="#2563eb">
-<link rel="icon" href="favicon.png" type="image/png">
-<style>
-  :root{{--bg:#f5f7fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--up:#d4380d;--down:#16a34a;}}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}}
-  .wrap{{max-width:1280px;margin:0 auto;padding:30px 20px 60px;}}
-  .crumb{{font-size:13px;color:var(--muted);margin-bottom:6px;}}
-  .crumb a{{color:var(--accent);text-decoration:none;}}
-  header h1{{font-size:22px;font-weight:700;}}
-  header p{{color:var(--muted);font-size:13px;margin-top:4px;}}
-  .block{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;}}
-  .tablescroll{{overflow-x:auto;}}
-  table{{border-collapse:collapse;width:100%;font-size:13px;}}
-  th{{background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;}}
-  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){{text-align:left;}}
-  td{{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}}
-  tbody tr:hover{{background:#f7fafd;}}
-  .up{{color:var(--up);font-weight:600;}}
-  .down{{color:var(--down);font-weight:600;}}
-  .rem{{color:var(--muted);font-size:12px;max-width:200px;white-space:normal;}}
-  .note{{margin-top:10px;font-size:12px;color:var(--muted);}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 预选筛选</div>
-  <header>
-    <h1>A股预选筛选结果</h1>
-    <p>财务 + 动量综合预选 · 数据日期 2026-11-04 · 共 {len(rows)} 只（逐条判定）</p>
-  </header>
-  <div class="block">
-    <div class="tablescroll"><table><thead><tr>{th}</tr></thead><tbody>{tr}</tbody></table></div>
-    <div class="note">来源：<code>A股预选筛选结果_20261104.xlsx</code>（23 只明细）。本页为聚合门户「预选筛选」模块的独立子页；该模块尚在整合中，后续将接入自动化刷新。</div>
-  </div>
-</div>
-</body>
-</html>
+CSS_PORTAL = """
+:root{
+  --bg:#f5f7fa; --card:#ffffff; --ink:#1f2937; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
+  --green:#16a34a; --amber:#d97706; --gray:#9ca3af;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+     background:var(--bg);color:var(--ink);line-height:1.6;}
+.wrap{max-width:1080px;margin:0 auto;padding:34px 20px 60px;}
+header h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
+header p{color:var(--muted);margin-top:6px;font-size:14px;}
+.group{margin-top:26px;}
+.group h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.group h2 .cnt{font-size:12px;color:var(--muted);font-weight:400;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
+    text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px;
+    transition:.15s;position:relative;}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(0,0,0,.08);border-color:var(--accent);}
+.card .ico{font-size:26px;}
+.card h3{font-size:17px;font-weight:700;}
+.card p{font-size:13px;color:var(--muted);flex:1;}
+.card .meta{font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-soft);
+    padding:5px 9px;border-radius:8px;line-height:1.4;}
+.tag{align-self:flex-start;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
+.tag.pub{background:#dcfce7;color:var(--green);}
+.card .go{font-size:13px;color:var(--accent);font-weight:600;}
+footer{margin-top:42px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
 """
-with open(OUT_PRE, "w", encoding="utf-8") as f:
-    f.write(PRE_HTML)
 
-# ---------- 业绩快速增长子页（全量 + 交互式筛选 + 一键标准） ----------
-def load_growth_full():
-    try:
-        with open(GROWTH_JSON, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"generated_at": "", "count": 0, "data": []}
+# ================= aggregate.html (门户) =================
+portal = (
+    "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1.0'>"
+    "<title>A股研究终端 · 聚合入口</title>"
+    "<meta name='description' content='A股选股工具统一入口：动量看板、高成长股票、稳健股息票。'>"
+    "<meta name='theme-color' content='#2563eb'>"
+    "<link rel='icon' href='favicon.png' type='image/png'>"
+    "<style>" + CSS_PORTAL + "</style></head><body><div class='wrap'>"
+    "<header><h1>A股研究终端</h1>"
+    "<p>选股工具统一入口 · 子工具均在新标签页打开</p></header>"
+    "<section class='group'><h2>选股功能 <span class='cnt'>(3)</span></h2>"
+    "<div class='grid'>"
+    "<a class='card' href='index.html' target='_blank' rel='noopener'>"
+    "<div class='ico'>📊</div><h3>动量看板</h3>"
+    "<p>全市场 RPS×FIP 动量排名、板块强度与个股强度分布总看板。</p>"
+    "<div class='meta'>覆盖 " + str(m_count) + " 只 · asof " + m_asof + " · 全市场 RPS×FIP 动量排名</div>"
+    "<span class='tag pub'>公开</span><span class='go'>打开 →</span></a>"
+    "<a class='card' href='growth.html' target='_blank' rel='noopener'>"
+    "<div class='ico'>🚀</div><h3>高成长股票</h3>"
+    "<p>业绩快速增长扫描：营收/净利同比均值双增，按净利同比均值排序，含最新季度同比与 PE。</p>"
+    "<div class='meta'>全量 " + str(g_count) + " 只 · 净利/营收同比可排 · " + g_date + "</div>"
+    "<span class='tag pub'>公开</span><span class='go'>打开 →</span></a>"
+    "<a class='card' href='high-dividend/index.html' target='_blank' rel='noopener'>"
+    "<div class='ico'>💰</div><h3>稳健股息票</h3>"
+    "<p>高股息扫描：稳健分级（核心/观察/一般）+ 连续分红、TTM 股息率与 5 年累计派息率。</p>"
+    "<div class='meta'>" + str(div_total) + " 只 · 稳健核心 " + str(grades.get('稳健核心', 0)) + " / 观察 " + str(grades.get('稳健观察', 0)) + "</div>"
+    "<span class='tag pub'>公开</span><span class='go'>打开 →</span></a>"
+    "</div></section>"
+    "<footer>点击卡片在新标签页打开对应工具；子工具地址更新时本页自动保持最新。<br>"
+    "收藏本页网址即可，无需记住各子工具地址。</footer>"
+    "</div></body></html>"
+)
+with open(os.path.join(HERE, "aggregate.html"), "w", encoding="utf-8") as f:
+    f.write(portal)
 
-_gj = load_growth_full()
-_gdata = _gj.get("data", [])
-_ggen = _gj.get("generated_at", "") or "2026-11-09"
-_gtotal = _gj.get("count", 0)
-_gjson_js = json.dumps(_gdata, ensure_ascii=False).replace("</", "<\\/")
-
-GROWTH_HTML = r"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>A股业绩快速增长 · 全量筛选</title>
-<meta name="theme-color" content="#2563eb">
-<link rel="icon" href="favicon.png" type="image/png">
-<style>
-  :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--up:#d4380d;--down:#16a34a;}
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
-  .wrap{max-width:1360px;margin:0 auto;padding:30px 20px 60px;}
-  .crumb{font-size:13px;color:var(--muted);margin-bottom:6px;}
-  .crumb a{color:var(--accent);text-decoration:none;}
-  header h1{font-size:22px;font-weight:700;}
-  header p{color:var(--muted);font-size:13px;margin-top:4px;}
-  .block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;}
-  .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:6px;}
-  .fitem{display:flex;flex-direction:column;gap:3px;}
-  .fitem label{font-size:11px;color:var(--muted);}
-  .fitem .inp{display:flex;align-items:center;gap:4px;}
-  .fitem input{width:88px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:13px;outline:none;}
-  .fitem input:focus{border-color:var(--accent);}
-  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 12px;}
-  .bar input.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;}
-  .bar input.search:focus{border-color:var(--accent);}
-  .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;}
-  .btn.std{background:var(--accent);color:#fff;}
-  .btn.reset{background:#eef2f7;color:var(--ink);}
-  .btn.onlystd{background:#fff;color:var(--accent);border:1px solid var(--accent);}
-  .btn:hover{opacity:.9;}
-  .btn.info{background:#fff;color:var(--ink);border:1px solid var(--line);}
-  .descbox{display:none;margin:0 0 12px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;}
-  .dtitle{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
-  .drow{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px;line-height:1.6;}
-  .drow:last-child{border-bottom:none;}
-  .drow b{flex:0 0 132px;font-weight:600;color:var(--ink);}
-  .drow span{flex:1;color:var(--muted);}
-  .cnt{font-size:13px;color:var(--accent);font-weight:600;margin-left:auto;}
-  .tablescroll{overflow-x:auto;max-height:72vh;overflow-y:auto;}
-  table{border-collapse:collapse;width:100%;font-size:13px;}
-  thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;cursor:pointer;user-select:none;}
-  thead th .ar{font-size:10px;color:#93c5fd;}
-  thead th .i{font-size:10px;color:#93c5fd;margin-left:4px;font-weight:400;}
-  thead th:hover{background:#dbeafe;}
-  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left;}
-  td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
-  tbody tr:hover{background:#f7fafd;}
-  .up{color:var(--up);font-weight:600;}
-  .na{color:var(--muted);}
-  .tagstd{display:inline-block;background:#fde8e8;color:var(--up);font-size:12px;padding:1px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;}
-  .note{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;}
-  code{background:#eef2f7;padding:1px 5px;border-radius:4px;}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长（全量筛选）</div>
-  <header>
-    <h1>A股业绩快速增长 · 全量筛选<span id="stdmark"></span></h1>
-    <p>高成长扫描 · 数据日期 __GGEN__ · 全量 __GTOTAL__ 只标的（含全部指标，可自由筛选）；一键套用「业绩快速增长标准」。</p>
-  </header>
-  <div class="block">
-    <div class="filters" id="filters">
-      <div class="fitem"><label>市值(亿) ≥</label><div class="inp"><input id="f_mcap_yi" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>营收均值(亿) ≥</label><div class="inp"><input id="f_rev_avg_yi" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>净利均值(万) ≥</label><div class="inp"><input id="f_np_avg_wan" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>营收增速均值% ≥</label><div class="inp"><input id="f_rev_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>净利增速均值% ≥</label><div class="inp"><input id="f_np_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>营收Q同比% ≥</label><div class="inp"><input id="f_rev_q_yoy" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>净利Q同比% ≥</label><div class="inp"><input id="f_np_q_yoy" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>EPS同比% ≥</label><div class="inp"><input id="f_eps_yoy" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>PE TTM ≥</label><div class="inp"><input id="f_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>PE TTM ≤</label><div class="inp"><input id="x_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
-    </div>
-    <div class="bar">
-      <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
-      <button class="btn std" onclick="oneClick()">⚡ 一键筛选（业绩快速增长标准）</button>
-      <button class="btn onlystd" onclick="onlyStd()">仅看标准达标</button>
-      <button class="btn reset" onclick="resetAll()">重置</button>
-      <button class="btn info" onclick="toggleDesc()">ⓘ 指标说明</button>
-      <span class="cnt" id="cnt"></span>
-    </div>
-    <div id="descbox" class="descbox"></div>
-    <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
-    <div class="note">
-      PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
-      口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
-      同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
-      去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
-      来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
-      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。
-    </div>
-  </div>
-</div>
-<script>
-const DATA = __GJSON__;
-const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
-const DESC = {
-  "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
-  "name": "证券简称，来自 rps.json；保留 XD（除息）等行情标记。",
-  "industry": "行业分类，来自 rps.json；用于搜索，不参与筛选计算。",
-  "mcap_yi": "总市值，单位亿元。腾讯行情 2026-11-09 实时快照（data/mcap.csv 已全量重建），非流通市值；一键标准中的 ≥50亿 判据。",
-  "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与一键标准，可用上方 PE 区间单独或叠加筛选。",
-  "rev_avg_yi": "近三个完整财年（2023/2024/2025）营业总收入的算术平均，单位亿元；业绩报表原始单位为元。",
-  "rev_yoy_avg": "近三年年报披露的营业总收入同比增长率的算术平均（%）；任一年缺失或无法计算则该项留空。",
-  "np_avg_wan": "近三个完整财年净利润的算术平均，单位万元；业绩报表原始单位为元。",
-  "np_yoy_avg": "近三年年报披露的净利润同比增长率的算术平均（%）；亏损、低基数或重组可能产生极端值，为披露口径原值。",
-  "rev_q_yoy": "最新季度（2026 三季报，1–9 月累计）营业总收入同比增长，取报表披露值。",
-  "np_q_yoy": "最新季度（2026 三季报，1–9 月累计）净利润同比增长，取报表披露值。",
-  "eps_yoy": "(2026Q3 累计 EPS − 2025Q3 累计 EPS) ÷ 2025Q3 累计 EPS ×100%；去年同期 EPS≤0 或缺失则无法判定、留空（约 21.6%）。"
-};
-const COLS = [
-  {k:"code", t:"代码"},
-  {k:"name", t:"名称"},
-  {k:"industry", t:"行业"},
-  {k:"mcap_yi", t:"市值(亿)", d:1},
-  {k:"pe_ttm", t:"PE TTM", d:2},
-  {k:"rev_avg_yi", t:"营收均值(亿)", d:1},
-  {k:"rev_yoy_avg", t:"营收增速均值%", d:1, up:true},
-  {k:"np_avg_wan", t:"净利均值(万)", d:1},
-  {k:"np_yoy_avg", t:"净利增速均值%", d:1, up:true},
-  {k:"rev_q_yoy", t:"营收Q同比%", d:1, up:true},
-  {k:"np_q_yoy", t:"净利Q同比%", d:1, up:true},
-  {k:"eps_yoy", t:"EPS同比%", d:1, up:true}
-];
-let sortKey=null, sortDir=-1;
-function escHtml(s){
-  return String(s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});
-}
-function fmt(v, d){
-  if(v===null||v===undefined||v==="") return null;
-  const n=Number(v);
-  return isNaN(n)?null:n.toFixed(d);
-}
-function buildHead(){
-  const tr=document.getElementById("thead");
-  tr.innerHTML = COLS.map(c=>{
-    let ar="";
-    if(sortKey===c.k) ar = sortDir<0 ? " ▼" : " ▲";
-    const tip = DESC[c.k] ? ' title="'+escHtml(DESC[c.k])+'"' : '';
-    return '<th data-k="'+c.k+'"'+tip+'>'+c.t+'<span class="i">ⓘ</span><span class="ar">'+ar+'</span></th>';
-  }).join("");
-  tr.querySelectorAll("th").forEach(function(th){
-    th.onclick=function(){
-      const k=th.getAttribute("data-k");
-      if(sortKey===k) sortDir=-sortDir; else {sortKey=k; sortDir=-1;}
-      buildHead(); apply();
-    };
-  });
-}
-function getMin(id){
-  const v=document.getElementById(id).value.trim();
-  if(v==="") return null;
-  const n=parseFloat(v);
-  return isNaN(n)?null:n;
-}
-function apply(){
-  const q=(document.getElementById("q").value||"").trim().toLowerCase();
-  const mins={
-    mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
-    np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
-    np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
-    np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy"),
-    pe_ttm:getMin("f_pe_ttm")
-  };
-  const maxs={pe_ttm:getMin("x_pe_ttm")};
-  let rows=DATA.filter(function(r){
-    for(const k in mins){ const m=mins[k]; if(m!=null && !(r[k]!=null && r[k]>=m)) return false; }
-    for(const k in maxs){ const m=maxs[k]; if(m!=null && !(r[k]!=null && r[k]<=m)) return false; }
-    if(q){ const t=(r.code+" "+(r.name||"")+" "+(r.industry||"")).toLowerCase(); if(t.indexOf(q)<0) return false; }
-    return true;
-  });
-  if(sortKey){
-    rows=rows.slice().sort(function(a,b){
-      let x=a[sortKey], y=b[sortKey];
-      if(x==null&&y==null) return 0;
-      if(x==null) return 1; if(y==null) return -1;
-      if(typeof x==="string"){ return x.localeCompare(y,"zh")*sortDir; }
-      return (x-y)*sortDir;
-    });
-  }
-  const tb=document.getElementById("tb");
-  tb.innerHTML = rows.map(function(r){
-    const tds=COLS.map(function(c){
-      const raw=r[c.k];
-      if(raw===null||raw===undefined||raw==="") return '<td class="na">—</td>';
-      const v = c.d ? fmt(raw, c.d) : escHtml(raw);
-      if(v===null) return '<td class="na">—</td>';
-      if(c.up) return '<td class="up">'+v+'</td>';
-      return '<td>'+v+'</td>';
-    }).join("");
-    return '<tr>'+tds+'</tr>';
-  }).join("");
-  document.getElementById("cnt").textContent='显示 '+rows.length+' / 共 '+DATA.length+' 只';
-}
-function oneClick(){
-  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
-  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
-  document.getElementById("q").value="";
-  document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
-  apply();
-}
-function onlyStd(){
-  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
-  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
-  document.getElementById("q").value="";
-  document.getElementById("stdmark").innerHTML='<span class="tagstd">标准达标</span>';
-  apply();
-}
-function resetAll(){
-  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm"].forEach(function(id){ document.getElementById(id).value=""; });
-  document.getElementById("q").value="";
-  document.getElementById("stdmark").innerHTML="";
-  apply();
-}
-function toggleDesc(){
-  const b=document.getElementById("descbox");
-  if(b.style.display==="block"){ b.style.display="none"; return; }
-  let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
-  h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
-  h+='<div class="drow"><b>一键标准</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内，可在标准之上叠加估值区间。点击一键按钮会清空 PE 条件。</span></div>';
-  b.innerHTML=h;
-  b.style.display="block";
-}
-buildHead();
-apply();
-</script>
-</body>
-</html>
-"""
-GROWTH_HTML = (GROWTH_HTML.replace("__GJSON__", _gjson_js)
-                           .replace("__GGEN__", _ggen)
-                           .replace("__GTOTAL__", str(_gtotal)))
-OUT_GROWTH = os.path.join(DASH, "growth.html")
-with open(OUT_GROWTH, "w", encoding="utf-8") as f:
-    f.write(GROWTH_HTML)
-
-
-print("OK portal ->", OUT_PORTAL)
-print("OK prescreen ->", OUT_PRE)
-print("OK growth ->", OUT_GROWTH)
-print("tools cards:", tools_cards.count('<a class="card"'), "| road:", road_cards.count('<div class="card disabled"'), "| cols:", cols_cards.count('<a class="card"'))
+print("OK -> aggregate.html (%d bytes), growth.html (%d bytes), growth rows=%d"
+      % (os.path.getsize(os.path.join(HERE, "aggregate.html")),
+         os.path.getsize(os.path.join(HERE, "growth.html")),
+         len(growth_sel)))

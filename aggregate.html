@@ -1,97 +1,30 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>A股研究终端 · 聚合入口</title>
-<meta name="description" content="一个网址聚合全部 A股 选股工具与栏目：选股盘、动量看板、高股息、预选筛选。">
-<meta name="theme-color" content="#2563eb">
-<link rel="icon" href="favicon.png" type="image/png">
-<style>
-  :root{
-    --bg:#f5f7fa; --card:#ffffff; --ink:#1f2937; --muted:#6b7280;
-    --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
-    --green:#16a34a; --amber:#d97706; --gray:#9ca3af;
-    --violet:#7c3aed; --blue:#2563eb;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-       background:var(--bg);color:var(--ink);line-height:1.6;}
-  .wrap{max-width:1080px;margin:0 auto;padding:34px 20px 60px;}
-  header h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
-  header p{color:var(--muted);margin-top:6px;font-size:14px;}
-  nav{position:sticky;top:0;background:rgba(245,247,250,.92);backdrop-filter:blur(8px);
-      z-index:10;padding:14px 0;margin:22px 0 6px;border-bottom:1px solid var(--line);
-      display:flex;gap:10px;flex-wrap:wrap;}
-  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);
-      padding:8px 18px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:600;transition:.15s;}
-  nav button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .group{margin-top:26px;}
-  .group h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
-  .group h2 .cnt{font-size:12px;color:var(--muted);font-weight:400;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
-      text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px;
-      transition:.15s;position:relative;}
-  .card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(0,0,0,.08);border-color:var(--accent);}
-  .card .ico{font-size:26px;}
-  .card h3{font-size:17px;font-weight:700;}
-  .card p{font-size:13px;color:var(--muted);flex:1;}
-  .card .meta{font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-soft);
-      padding:5px 9px;border-radius:8px;line-height:1.4;}
-  .tag{align-self:flex-start;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
-  .tag.pub{background:#dcfce7;color:var(--green);}
-  .tag.local{background:#fef3c7;color:var(--amber);}
-  .tag.soon{background:#f3f4f6;color:var(--gray);}
-  .card .go{font-size:13px;color:var(--accent);font-weight:600;}
-  .card.disabled{opacity:.72;cursor:default;}
-  .card.disabled:hover{transform:none;box-shadow:none;border-color:var(--line);}
-  footer{margin-top:42px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
-  .hidden{display:none;}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>A股研究终端</h1>
-    <p>选股工具与定期栏目的统一入口 · 所有子工具在新标签页打开</p>
-  </header>
-
-  <nav>
-    <button data-g="tools" class="active">选股功能</button>
-    <button data-g="road">待拓展</button>
-    <button data-g="cols">栏目</button>
-  </nav>
-
-  <section class="group" id="g-tools">
-    <h2>选股功能 <span class="cnt">（5）</span></h2>
-    <div class="grid"><a class="card" href="pick.html" target="_blank" rel="noopener"><div class="ico">🔍</div><h3>A股选股盘</h3><p>盘中 RPS×FIP 选股日报：综合RPS&gt;85 · FIP250≤0 · 市值&gt;50亿 · 量比&gt;1.5 等多重筛选，含 9 级漏斗与强势板块。</p><div class="meta">快照 2026-10-21 · 候选 13 只 · DPWD DEFENSIVE (TEMP10 33.2)</div><span class="tag pub">实时</span><span class="go">打开 →</span></a><a class="card" href="index.html" target="_blank" rel="noopener"><div class="ico">📊</div><h3>动量看板</h3><p>全市场 RPS×FIP 动量排名、板块强度与个股强度分布的总看板。</p><div class="meta">全市场 RPS×FIP 动量排名 · 板块强度</div><span class="tag pub">公开</span><span class="go">打开 →</span></a><a class="card" href="high-dividend/index.html" target="_blank" rel="noopener"><div class="ico">💰</div><h3>高股息稳健资产</h3><p>854 只高股息扫描：稳健分级（核心/观察/一般）+ 连续分红、TTM 股息率、5 年累计派息率与分红质量。</p><div class="meta">854 只 · 稳健核心 192 / 观察 258 · 最高 TTM 股息率 17.57%</div><span class="tag pub">公开</span><span class="go">打开 →</span></a><a class="card" href="prescreen.html" target="_blank" rel="noopener"><div class="ico">🧪</div><h3>预选筛选</h3><p>财务 + 动量综合预选：毛利率/净利率、营收与利润同比、分红率逐条判定。</p><div class="meta">2026-11-04 · 23 只 · 财务+动量综合预选</div><span class="tag pub">公开</span><span class="go">打开 →</span></a><a class="card" href="growth.html" target="_blank" rel="noopener"><div class="ico">🚀</div><h3>业绩快速增长</h3><p>高成长扫描：近三年营收/净利同比增速均值均≥20%、规模达标，且最新季度营收/净利/EPS 同比三项均≥20%。</p><div class="meta">5004 只 · 全量可筛 · 一键标准：市值≥50亿+三年双增≥20%+最新季度三20%</div><span class="tag pub">公开</span><span class="go">打开 →</span></a></div>
-  </section>
-
-  <section class="group hidden" id="g-road">
-    <h2>待拓展 <span class="cnt">（4）</span></h2>
-    <div class="grid"><div class="card disabled"><div class="ico">📈</div><h3>净利润逐年追踪</h3><p>2021–2025 业绩报表逐年净利润增速与复合增长看板。</p><div class="meta">数据就绪 · netprofit_yearly/ 已沉淀 2021–2025 业绩报表</div><span class="tag soon">敬请期待</span><span class="go">即将上线</span></div><div class="card disabled"><div class="ico">🔁</div><h3>分红质量 · 再融资比</h3><p>纯回报型（未再融资）筛选：分红/再融资比 survivors 看板。</p><div class="meta">数据就绪 · bulk_financing.csv + f5_dividend_detail.csv</div><span class="tag soon">敬请期待</span><span class="go">即将上线</span></div><div class="card disabled"><div class="ico">⏱️</div><h3>盘前 / 盘后调度</h3><p>选股日报当前为盘中快照；待建盘前预选 + 盘后回顾双频调度。</p><div class="meta">规划中</div><span class="tag soon">敬请期待</span><span class="go">即将上线</span></div><div class="card disabled"><div class="ico">🔄</div><h3>聚合页自动刷新</h3><p>本门户为静态快照聚合；待建随各数据源刷新自动重渲并发布。</p><div class="meta">规划中</div><span class="tag soon">敬请期待</span><span class="go">即将上线</span></div></div>
-  </section>
-
-  <section class="group hidden" id="g-cols">
-    <h2>栏目 <span class="cnt">（1）</span></h2>
-    <div class="grid"><a class="card" href="pick.html" target="_blank" rel="noopener"><div class="ico">📰</div><h3>选股日报</h3><p>A股盘中选股日报栏目：每交易日 10:00 / 10:30 / 14:00 三档发布，含候选池与强势板块。</p><div class="meta">每个交易日 10:00 / 10:30 / 14:00 三档发布</div><span class="tag pub">公开</span><span class="go">打开 →</span></a></div>
-  </section>
-
-  <footer>
-    点击卡片会在新标签页打开对应工具或栏目；若某个功能卡片暂时打不开，刷新或稍后再试即可。<br>
-    收藏本页网址就够了，子工具地址更新时这里会自动保持最新。
-  </footer>
-</div>
-<script>
-document.querySelectorAll('nav button').forEach(function(b){
-  b.onclick=function(){
-    document.querySelectorAll('nav button').forEach(function(x){x.classList.remove('active');});
-    b.classList.add('active');
-    document.querySelectorAll('.group').forEach(function(g){g.classList.add('hidden');});
-    var el=document.getElementById('g-'+b.dataset.g); if(el) el.classList.remove('hidden');
-  };
-});
-</script>
-</body>
-</html>
+<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'><title>A股研究终端 · 聚合入口</title><meta name='description' content='A股选股工具统一入口：动量看板、高成长股票、稳健股息票。'><meta name='theme-color' content='#2563eb'><link rel='icon' href='favicon.png' type='image/png'><style>
+:root{
+  --bg:#f5f7fa; --card:#ffffff; --ink:#1f2937; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#2563eb; --accent-soft:#eff6ff;
+  --green:#16a34a; --amber:#d97706; --gray:#9ca3af;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+     background:var(--bg);color:var(--ink);line-height:1.6;}
+.wrap{max-width:1080px;margin:0 auto;padding:34px 20px 60px;}
+header h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
+header p{color:var(--muted);margin-top:6px;font-size:14px;}
+.group{margin-top:26px;}
+.group h2{font-size:18px;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.group h2 .cnt{font-size:12px;color:var(--muted);font-weight:400;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;
+    text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px;
+    transition:.15s;position:relative;}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(0,0,0,.08);border-color:var(--accent);}
+.card .ico{font-size:26px;}
+.card h3{font-size:17px;font-weight:700;}
+.card p{font-size:13px;color:var(--muted);flex:1;}
+.card .meta{font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-soft);
+    padding:5px 9px;border-radius:8px;line-height:1.4;}
+.tag{align-self:flex-start;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
+.tag.pub{background:#dcfce7;color:var(--green);}
+.card .go{font-size:13px;color:var(--accent);font-weight:600;}
+footer{margin-top:42px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px;}
+</style></head><body><div class='wrap'><header><h1>A股研究终端</h1><p>选股工具统一入口 · 子工具均在新标签页打开</p></header><section class='group'><h2>选股功能 <span class='cnt'>(3)</span></h2><div class='grid'><a class='card' href='index.html' target='_blank' rel='noopener'><div class='ico'>📊</div><h3>动量看板</h3><p>全市场 RPS×FIP 动量排名、板块强度与个股强度分布总看板。</p><div class='meta'>覆盖 5004 只 · asof 2026-11-09 · 全市场 RPS×FIP 动量排名</div><span class='tag pub'>公开</span><span class='go'>打开 →</span></a><a class='card' href='growth.html' target='_blank' rel='noopener'><div class='ico'>🚀</div><h3>高成长股票</h3><p>业绩快速增长扫描：营收/净利同比均值双增，按净利同比均值排序，含最新季度同比与 PE。</p><div class='meta'>全量 5004 只 · 净利/营收同比可排 · 2026-11-09</div><span class='tag pub'>公开</span><span class='go'>打开 →</span></a><a class='card' href='high-dividend/index.html' target='_blank' rel='noopener'><div class='ico'>💰</div><h3>稳健股息票</h3><p>高股息扫描：稳健分级（核心/观察/一般）+ 连续分红、TTM 股息率与 5 年累计派息率。</p><div class='meta'>854 只 · 稳健核心 192 / 观察 258</div><span class='tag pub'>公开</span><span class='go'>打开 →</span></a></div></section><footer>点击卡片在新标签页打开对应工具；子工具地址更新时本页自动保持最新。<br>收藏本页网址即可，无需记住各子工具地址。</footer></div></body></html>
