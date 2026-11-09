@@ -26,9 +26,9 @@
   .bar input.search{flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;}
   .bar input.search:focus{border-color:var(--accent);}
   .btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600;}
-  .btn.std{background:var(--accent);color:#fff;}
+  .btn.primary{background:var(--accent);color:#fff;}
+  .btn.std{background:#fff;color:var(--accent);border:1px solid var(--accent);}
   .btn.reset{background:#eef2f7;color:var(--ink);}
-  .btn.onlystd{background:#fff;color:var(--accent);border:1px solid var(--accent);}
   .btn:hover{opacity:.9;}
   .btn.info{background:#fff;color:var(--ink);border:1px solid var(--line);}
   .descbox{display:none;margin:0 0 12px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;}
@@ -59,7 +59,7 @@
   <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长（全量筛选）</div>
   <header>
     <h1>A股业绩快速增长 · 全量筛选<span id="stdmark"></span></h1>
-    <p>高成长扫描 · 数据日期 2026-11-09 · 全量 5004 只标的（含全部指标，可自由筛选）；一键套用「业绩快速增长标准」。</p>
+    <p>高成长扫描 · 数据日期 2026-11-09 · 全量 5004 只标的（含全部指标）。手动填写条件后点「筛选」，或点「⚡ 一键筛选」直接套用默认标准。</p>
   </header>
   <div class="block">
     <div class="filters" id="filters">
@@ -76,8 +76,8 @@
     </div>
     <div class="bar">
       <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
-      <button class="btn std" onclick="oneClick()">⚡ 一键筛选（业绩快速增长标准）</button>
-      <button class="btn onlystd" onclick="onlyStd()">仅看标准达标</button>
+      <button class="btn primary" onclick="manualFilter()">筛选</button>
+      <button class="btn std" onclick="oneClick()">⚡ 一键筛选（默认标准）</button>
       <button class="btn reset" onclick="resetAll()">重置</button>
       <button class="btn info" onclick="toggleDesc()">ⓘ 指标说明</button>
       <span class="cnt" id="cnt"></span>
@@ -101,8 +101,8 @@ const DESC = {
   "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
   "name": "证券简称，来自 rps.json；保留 XD（除息）等行情标记。",
   "industry": "行业分类，来自 rps.json；用于搜索，不参与筛选计算。",
-  "mcap_yi": "总市值，单位亿元。腾讯行情 2026-11-09 实时快照（data/mcap.csv 已全量重建），非流通市值；一键标准中的 ≥50亿 判据。",
-  "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与一键标准，可用上方 PE 区间单独或叠加筛选。",
+  "mcap_yi": "总市值，单位亿元。腾讯行情 2026-11-09 实时快照（data/mcap.csv 已全量重建），非流通市值；默认标准中的 ≥50亿 判据。",
+  "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与默认标准，可用上方 PE 区间单独或叠加筛选。",
   "rev_avg_yi": "近三个完整财年（2023/2024/2025）营业总收入的算术平均，单位亿元；业绩报表原始单位为元。",
   "rev_yoy_avg": "近三年年报披露的营业总收入同比增长率的算术平均（%）；任一年缺失或无法计算则该项留空。",
   "np_avg_wan": "近三个完整财年净利润的算术平均，单位万元；业绩报表原始单位为元。",
@@ -202,11 +202,8 @@ function oneClick(){
   document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
   apply();
 }
-function onlyStd(){
-  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
-  for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
-  document.getElementById("q").value="";
-  document.getElementById("stdmark").innerHTML='<span class="tagstd">标准达标</span>';
+function manualFilter(){
+  document.getElementById("stdmark").innerHTML="";
   apply();
 }
 function resetAll(){
@@ -220,12 +217,15 @@ function toggleDesc(){
   if(b.style.display==="block"){ b.style.display="none"; return; }
   let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
   h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
-  h+='<div class="drow"><b>一键标准</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内，可在标准之上叠加估值区间。点击一键按钮会清空 PE 条件。</span></div>';
+  h+='<div class="drow"><b>默认标准（一键筛选）</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内。点击一键按钮会清空 PE 条件并自动套用以上阈值；点「筛选」按钮则只按面板当前输入生效，不改动任何输入值。</span></div>';
   b.innerHTML=h;
   b.style.display="block";
 }
 buildHead();
 apply();
+document.getElementById("filters").querySelectorAll("input").forEach(function(el){
+  el.addEventListener("keydown",function(e){ if(e.key==="Enter") manualFilter(); });
+});
 </script>
 </body>
 </html>
