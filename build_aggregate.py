@@ -11,6 +11,7 @@
 输出： a-share-dashboard/aggregate.html + prescreen.html
 """
 import os, json, csv, collections
+import pandas as pd
 
 ROOT = r"D:\Workbuddy Space\A股大作战"
 DASH = os.path.join(ROOT, "a-share-dashboard")
@@ -19,6 +20,7 @@ SCREEN = os.path.join(ROOT, "_screen")
 PICK = os.path.join(DASH, "data", "pick_latest.json")
 DIV  = os.path.join(SCREEN, "高股息稳健资产_主表.csv")
 PRE  = os.path.join(SCREEN, "A股预选筛选结果_20261104.xlsx")
+GROWTH = os.path.join(SCREEN, "业绩快速增长企业_筛选结果.csv")
 OUT_PORTAL = os.path.join(DASH, "aggregate.html")
 OUT_PRE    = os.path.join(DASH, "prescreen.html")
 
@@ -54,6 +56,11 @@ def snapshots():
     except Exception:
         out["div"] = "数据读取失败"
     out["pre"] = "2026-11-04 · 23 只 · 财务+动量综合预选"
+    try:
+        gdf = pd.read_csv(GROWTH)
+        out["growth"] = f"{len(gdf)} 只 · 市值≥50亿 + 三年营收/净利双增≥20% + 最新季度三20%"
+    except Exception:
+        out["growth"] = "数据读取失败"
     out["mom"] = "全市场 RPS×FIP 动量排名 · 板块强度"
     out["col"] = "每个交易日 10:00 / 10:30 / 14:00 三档发布"
     return out
@@ -86,6 +93,8 @@ tools_cards = "".join([
          S["div"], "high-dividend/index.html", "公开", "pub"),
     card("🧪", "预选筛选", "财务 + 动量综合预选：毛利率/净利率、营收与利润同比、分红率逐条判定。",
          S["pre"], "prescreen.html", "公开", "pub"),
+    card("🚀", "业绩快速增长", "高成长扫描：近三年营收/净利同比增速均值均≥20%、规模达标，且最新季度营收/净利/EPS 同比三项均≥20%。",
+         S["growth"], "growth.html", "公开", "pub"),
 ])
 
 road_cards = "".join([
@@ -171,7 +180,7 @@ PORTAL = """<!DOCTYPE html>
   </nav>
 
   <section class="group" id="g-tools">
-    <h2>选股功能 <span class="cnt">（4）</span></h2>
+    <h2>选股功能 <span class="cnt">（5）</span></h2>
     <div class="grid">__TOOLS__</div>
   </section>
 
@@ -290,6 +299,109 @@ PRE_HTML = f"""<!DOCTYPE html>
 with open(OUT_PRE, "w", encoding="utf-8") as f:
     f.write(PRE_HTML)
 
+# ---------- 业绩快速增长子页 ----------
+def load_growth():
+    try:
+        return pd.read_csv(GROWTH, dtype=str)
+    except Exception:
+        return pd.DataFrame()
+
+gdf = load_growth()
+gcols = [("code","代码"),("name","名称"),("industry","行业"),("mcap_yi","市值(亿)"),
+         ("rev_avg_yi","营收均值(亿)"),("rev_yoy_avg","营收增速均值%"),
+         ("np_avg_wan","净利均值(万)"),("np_yoy_avg","净利增速均值%"),
+         ("rev_q_yoy","营收Q同比%"),("np_q_yoy","净利Q同比%"),("eps_yoy","EPS同比%")]
+gth = "".join(f"<th>{esc(lbl)}</th>" for _, lbl in gcols)
+gtr = ""
+for _, r in gdf.iterrows():
+    tds = ""
+    for key, _ in gcols:
+        v = r.get(key)
+        if key in ("rev_yoy_avg","np_yoy_avg","rev_q_yoy","np_q_yoy","eps_yoy"):
+            tds += f'<td class="up">{fmt(v,1)}</td>'
+        elif key in ("mcap_yi","rev_avg_yi","np_avg_wan"):
+            tds += f"<td>{fmt(v,1)}</td>"
+        else:
+            tds += f"<td>{esc(v)}</td>"
+    gtr += f"<tr>{tds}</tr>"
+
+gdate = "2026-11-09"
+gcnt = len(gdf)
+GROWTH_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>A股业绩快速增长企业</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="favicon.png" type="image/png">
+<style>
+  :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--up:#d4380d;--down:#16a34a;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;}
+  .wrap{max-width:1320px;margin:0 auto;padding:30px 20px 60px;}
+  .crumb{font-size:13px;color:var(--muted);margin-bottom:6px;}
+  .crumb a{color:var(--accent);text-decoration:none;}
+  header h1{font-size:22px;font-weight:700;}
+  header p{color:var(--muted);font-size:13px;margin-top:4px;}
+  .block{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;}
+  .search{margin:6px 0 10px;display:flex;gap:10px;align-items:center;}
+  .search input{border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;width:260px;outline:none;}
+  .search input:focus{border-color:var(--accent);}
+  .tablescroll{overflow-x:auto;max-height:78vh;overflow-y:auto;}
+  table{border-collapse:collapse;width:100%;font-size:13px;}
+  thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left;}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+  tbody tr:hover{background:#f7fafd;}
+  .up{color:var(--up);font-weight:600;}
+  .note{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.7;}
+  code{background:#eef2f7;padding:1px 5px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长企业</div>
+  <header>
+    <h1>A股业绩快速增长企业</h1>
+    <p>高成长扫描 · 数据日期 __GDATE__ · 共 __GCNT__ 只（市值≥50亿 + 近三年营收/净利双增≥20% + 最新季度营收/净利/EPS 三项同比≥20%）</p>
+  </header>
+  <div class="block">
+    <div class="search"><input id="q" placeholder="搜索代码 / 名称…" oninput="filter()"><span id="cnt" style="font-size:12px;color:var(--muted)"></span></div>
+    <div class="tablescroll"><table><thead><tr>__GTH__</tr></thead><tbody id="tb">__GTR__</tbody></table></div>
+    <div class="note">
+      口径：市值取 <code>rps.json</code> 快照（asof 2026-11-06，已剔除 ST/退市）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
+      同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
+      去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
+      来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。
+    </div>
+  </div>
+</div>
+<script>
+function filter(){
+  var q=document.getElementById('q').value.trim().toLowerCase();
+  var rows=document.querySelectorAll('#tb tr');var n=0;
+  rows.forEach(function(tr){
+    var t=tr.textContent.toLowerCase();
+    var show=!q||t.indexOf(q)>=0;
+    tr.style.display=show?'':'none';if(show)n++;
+  });
+  document.getElementById('cnt').textContent='显示 '+n+' / '+rows.length;
+}
+filter();
+</script>
+</body>
+</html>
+"""
+GROWTH_HTML = (GROWTH_HTML.replace("__GTH__", gth)
+                          .replace("__GTR__", gtr)
+                          .replace("__GCNT__", str(gcnt))
+                          .replace("__GDATE__", gdate))
+OUT_GROWTH = os.path.join(DASH, "growth.html")
+with open(OUT_GROWTH, "w", encoding="utf-8") as f:
+    f.write(GROWTH_HTML)
+
 print("OK portal ->", OUT_PORTAL)
 print("OK prescreen ->", OUT_PRE)
+print("OK growth ->", OUT_GROWTH)
 print("tools cards:", tools_cards.count('<a class="card"'), "| road:", road_cards.count('<div class="card disabled"'), "| cols:", cols_cards.count('<a class="card"'))
