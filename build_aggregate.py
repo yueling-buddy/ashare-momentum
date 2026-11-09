@@ -413,9 +413,13 @@ const COLS = [
   {k:"eps_yoy", t:"EPS同比%", d:1, up:true}
 ];
 let sortKey=null, sortDir=-1;
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});
+}
 function fmt(v, d){
-  if(v===null||v===undefined||(typeof v==="number"&&isNaN(v))) return null;
-  return Number(v).toFixed(d);
+  if(v===null||v===undefined||v==="") return null;
+  const n=Number(v);
+  return isNaN(n)?null:n.toFixed(d);
 }
 function buildHead(){
   const tr=document.getElementById("thead");
@@ -463,7 +467,9 @@ function apply(){
   const tb=document.getElementById("tb");
   tb.innerHTML = rows.map(function(r){
     const tds=COLS.map(function(c){
-      const v=fmt(r[c.k], c.d||0);
+      const raw=r[c.k];
+      if(raw===null||raw===undefined||raw==="") return '<td class="na">—</td>';
+      const v = c.d ? fmt(raw, c.d) : escHtml(raw);
       if(v===null) return '<td class="na">—</td>';
       if(c.up) return '<td class="up">'+v+'</td>';
       return '<td>'+v+'</td>';
