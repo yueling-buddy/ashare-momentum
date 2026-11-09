@@ -378,6 +378,8 @@ GROWTH_HTML = r"""<!DOCTYPE html>
       <div class="fitem"><label>营收Q同比% ≥</label><div class="inp"><input id="f_rev_q_yoy" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>净利Q同比% ≥</label><div class="inp"><input id="f_np_q_yoy" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>EPS同比% ≥</label><div class="inp"><input id="f_eps_yoy" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>PE TTM ≥</label><div class="inp"><input id="f_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>PE TTM ≤</label><div class="inp"><input id="x_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
     </div>
     <div class="bar">
       <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
@@ -388,6 +390,7 @@ GROWTH_HTML = r"""<!DOCTYPE html>
     </div>
     <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
     <div class="note">
+      PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
       口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
       同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
       去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
@@ -404,6 +407,7 @@ const COLS = [
   {k:"name", t:"名称"},
   {k:"industry", t:"行业"},
   {k:"mcap_yi", t:"市值(亿)", d:1},
+  {k:"pe_ttm", t:"PE TTM", d:2},
   {k:"rev_avg_yi", t:"营收均值(亿)", d:1},
   {k:"rev_yoy_avg", t:"营收增速均值%", d:1, up:true},
   {k:"np_avg_wan", t:"净利均值(万)", d:1},
@@ -448,10 +452,13 @@ function apply(){
     mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
     np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
     np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
-    np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy")
+    np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy"),
+    pe_ttm:getMin("f_pe_ttm")
   };
+  const maxs={pe_ttm:getMin("x_pe_ttm")};
   let rows=DATA.filter(function(r){
     for(const k in mins){ const m=mins[k]; if(m!=null && !(r[k]!=null && r[k]>=m)) return false; }
+    for(const k in maxs){ const m=maxs[k]; if(m!=null && !(r[k]!=null && r[k]<=m)) return false; }
     if(q){ const t=(r.code+" "+(r.name||"")+" "+(r.industry||"")).toLowerCase(); if(t.indexOf(q)<0) return false; }
     return true;
   });
@@ -479,19 +486,21 @@ function apply(){
   document.getElementById("cnt").textContent='显示 '+rows.length+' / 共 '+DATA.length+' 只';
 }
 function oneClick(){
+  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
   for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
   apply();
 }
 function onlyStd(){
+  document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
   for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML='<span class="tagstd">标准达标</span>';
   apply();
 }
 function resetAll(){
-  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy"].forEach(function(id){ document.getElementById(id).value=""; });
+  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm"].forEach(function(id){ document.getElementById(id).value=""; });
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML="";
   apply();
