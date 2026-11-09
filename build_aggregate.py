@@ -90,6 +90,10 @@ for r in growth_sel:
     )
 rows_html = "\n".join(rows_html)
 
+# 行业下拉选项（用于筛选框）
+industries = sorted({ (r.get("industry") or "") for r in growth_sel if r.get("industry") })
+ind_opts = "".join("<option value='%s'>%s</option>" % (i, i) for i in industries)
+
 # ================= growth.html =================
 CSS = """
 :root{
@@ -122,6 +126,13 @@ td.ind{color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis
 .up{color:var(--up);font-weight:600;}
 .down{color:var(--down);font-weight:600;}
 .neu{color:var(--neu);}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:6px 0 4px;}
+.filters label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);}
+.filters input,.filters select{border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;font-size:13px;background:#fff;color:var(--ink);min-width:130px;}
+.filters input[type=number]{min-width:96px;}
+.filters button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;}
+.filters button.ghost{background:#fff;color:var(--accent);}
+.fcount{display:inline-block;margin:6px 0 2px;color:var(--muted);font-size:12px;font-weight:600;}
 footer{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;}
 """
 
@@ -134,8 +145,18 @@ growth_html = (
     "<header><h1>🚀 高成长股票</h1>"
     "<p>A股业绩快速增长扫描 · 数据源 growth_full.json（生成于 " + g_date + "）</p></header>"
     "<a class='back' href='aggregate.html'>← 返回聚合页</a><br>"
-    "<span class='note'>筛选：营收同比均值 &gt; 20% 且 净利同比均值 &gt; 20%，按净利同比均值降序（最多 200 只）· 点击表头排序</span>"
-    "<table id='gt'><thead><tr>"
+     "<span class='note'>筛选：营收同比均值 &gt; 20% 且 净利同比均值 &gt; 20%，按净利同比均值降序（最多 200 只）· 点击表头排序 · 下方可二次筛选</span>"
+     "<div class='filters'>"
+     "<label>关键词<input type='text' id='f_kw' placeholder='如 300641 / 正丹'></label>"
+     "<label>行业<select id='f_ind'><option value=''>全部行业</option>" + ind_opts + "</select></label>"
+     "<label>市值≥(亿)<input type='number' id='f_mcap' value='0' step='10' min='0'></label>"
+     "<label>营收同比%≥<input type='number' id='f_rev' value='0' step='5' min='0'></label>"
+     "<label>净利同比%≥<input type='number' id='f_np' value='0' step='50' min='0'></label>"
+     "<label>最新季净利%≥<input type='number' id='f_nq' value='0' step='10' min='0'></label>"
+     "<button class='ghost' id='f_reset' type='button'>重置</button>"
+     "</div>"
+     "<span class='fcount' id='fcount'></span>"
+     "<table id='gt'><thead><tr>"
     "<th data-k='code'>代码</th><th data-k='name'>名称</th><th data-k='ind'>行业</th>"
     "<th data-k='mcap' class='num'>市值(亿)</th>"
     "<th data-k='rev' class='num'>营收同比%↑</th><th data-k='np' class='num'>净利同比%↑</th>"
@@ -161,6 +182,42 @@ growth_html = (
     "    rows.forEach(function(r){tb.appendChild(r);});"
     "  };"
     "});"
+    "function applyFilters(){"
+    "  var kw=document.getElementById('f_kw').value.trim().toLowerCase();"
+    "  var ind=document.getElementById('f_ind').value;"
+    "  var mcap=parseFloat(document.getElementById('f_mcap').value)||0;"
+    "  var rev=parseFloat(document.getElementById('f_rev').value)||0;"
+    "  var npf=parseFloat(document.getElementById('f_np').value)||0;"
+    "  var nq=parseFloat(document.getElementById('f_nq').value)||0;"
+    "  var shown=0;"
+    "  Array.prototype.slice.call(tb.rows).forEach(function(tr){"
+    "    var c=tr.children;"
+    "    var code=c[0].textContent.toLowerCase(), name=c[1].textContent.toLowerCase(), industry=c[2].textContent;"
+    "    var m=parseFloat(c[3].textContent.replace(/[^0-9.\\-]/g,''))||0;"
+    "    var rv=parseFloat(c[4].textContent.replace(/[^0-9.\\-]/g,''))||0;"
+    "    var npv=parseFloat(c[5].textContent.replace(/[^0-9.\\-]/g,''))||0;"
+    "    var nqv=parseFloat(c[7].textContent.replace(/[^0-9.\\-]/g,''))||0;"
+    "    var ok=true;"
+    "    if(kw && !(code.indexOf(kw)>=0||name.indexOf(kw)>=0)) ok=false;"
+    "    if(ind && industry!==ind) ok=false;"
+    "    if(m<mcap) ok=false;"
+    "    if(rv<rev) ok=false;"
+    "    if(npv<npf) ok=false;"
+    "    if(nqv<nq) ok=false;"
+    "    tr.style.display=ok?'':'none';"
+    "    if(ok) shown++;"
+    "  });"
+    "  document.getElementById('fcount').textContent='筛选后 '+shown+' 只';"
+    "}"
+    "['f_kw','f_mcap','f_rev','f_np','f_nq'].forEach(function(id){document.getElementById(id).addEventListener('input',applyFilters);});"
+    "document.getElementById('f_ind').addEventListener('change',applyFilters);"
+    "document.getElementById('f_reset').addEventListener('click',function(){"
+    "  document.getElementById('f_kw').value='';document.getElementById('f_ind').value='';"
+    "  document.getElementById('f_mcap').value=0;document.getElementById('f_rev').value=0;"
+    "  document.getElementById('f_np').value=0;document.getElementById('f_nq').value=0;"
+    "  applyFilters();"
+    "});"
+    "applyFilters();"
     "</script></body></html>"
 )
 with open(os.path.join(HERE, "growth.html"), "w", encoding="utf-8") as f:
