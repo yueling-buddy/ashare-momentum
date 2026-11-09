@@ -346,11 +346,20 @@ GROWTH_HTML = r"""<!DOCTYPE html>
   .btn.reset{background:#eef2f7;color:var(--ink);}
   .btn.onlystd{background:#fff;color:var(--accent);border:1px solid var(--accent);}
   .btn:hover{opacity:.9;}
+  .btn.info{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .descbox{display:none;margin:0 0 12px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;}
+  .dtitle{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+  .drow{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px;line-height:1.6;}
+  .drow:last-child{border-bottom:none;}
+  .drow b{flex:0 0 132px;font-weight:600;color:var(--ink);}
+  .drow span{flex:1;color:var(--muted);}
   .cnt{font-size:13px;color:var(--accent);font-weight:600;margin-left:auto;}
   .tablescroll{overflow-x:auto;max-height:72vh;overflow-y:auto;}
   table{border-collapse:collapse;width:100%;font-size:13px;}
   thead th{position:sticky;top:0;background:#eff6ff;color:var(--accent);text-align:right;padding:8px 10px;border-bottom:2px solid #bfdbfe;white-space:nowrap;z-index:1;cursor:pointer;user-select:none;}
   thead th .ar{font-size:10px;color:#93c5fd;}
+  thead th .i{font-size:10px;color:#93c5fd;margin-left:4px;font-weight:400;}
+  thead th:hover{background:#dbeafe;}
   th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left;}
   td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
   tbody tr:hover{background:#f7fafd;}
@@ -386,8 +395,10 @@ GROWTH_HTML = r"""<!DOCTYPE html>
       <button class="btn std" onclick="oneClick()">⚡ 一键筛选（业绩快速增长标准）</button>
       <button class="btn onlystd" onclick="onlyStd()">仅看标准达标</button>
       <button class="btn reset" onclick="resetAll()">重置</button>
+      <button class="btn info" onclick="toggleDesc()">ⓘ 指标说明</button>
       <span class="cnt" id="cnt"></span>
     </div>
+    <div id="descbox" class="descbox"></div>
     <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
     <div class="note">
       PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
@@ -402,6 +413,20 @@ GROWTH_HTML = r"""<!DOCTYPE html>
 <script>
 const DATA = __GJSON__;
 const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
+const DESC = {
+  "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
+  "name": "证券简称，来自 rps.json；保留 XD（除息）等行情标记。",
+  "industry": "行业分类，来自 rps.json；用于搜索，不参与筛选计算。",
+  "mcap_yi": "总市值，单位亿元。腾讯行情 2026-11-09 实时快照（data/mcap.csv 已全量重建），非流通市值；一键标准中的 ≥50亿 判据。",
+  "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与一键标准，可用上方 PE 区间单独或叠加筛选。",
+  "rev_avg_yi": "近三个完整财年（2023/2024/2025）营业总收入的算术平均，单位亿元；业绩报表原始单位为元。",
+  "rev_yoy_avg": "近三年年报披露的营业总收入同比增长率的算术平均（%）；任一年缺失或无法计算则该项留空。",
+  "np_avg_wan": "近三个完整财年净利润的算术平均，单位万元；业绩报表原始单位为元。",
+  "np_yoy_avg": "近三年年报披露的净利润同比增长率的算术平均（%）；亏损、低基数或重组可能产生极端值，为披露口径原值。",
+  "rev_q_yoy": "最新季度（2026 三季报，1–9 月累计）营业总收入同比增长，取报表披露值。",
+  "np_q_yoy": "最新季度（2026 三季报，1–9 月累计）净利润同比增长，取报表披露值。",
+  "eps_yoy": "(2026Q3 累计 EPS − 2025Q3 累计 EPS) ÷ 2025Q3 累计 EPS ×100%；去年同期 EPS≤0 或缺失则无法判定、留空（约 21.6%）。"
+};
 const COLS = [
   {k:"code", t:"代码"},
   {k:"name", t:"名称"},
@@ -430,7 +455,8 @@ function buildHead(){
   tr.innerHTML = COLS.map(c=>{
     let ar="";
     if(sortKey===c.k) ar = sortDir<0 ? " ▼" : " ▲";
-    return '<th data-k="'+c.k+'">'+c.t+'<span class="ar">'+ar+'</span></th>';
+    const tip = DESC[c.k] ? ' title="'+escHtml(DESC[c.k])+'"' : '';
+    return '<th data-k="'+c.k+'"'+tip+'>'+c.t+'<span class="i">ⓘ</span><span class="ar">'+ar+'</span></th>';
   }).join("");
   tr.querySelectorAll("th").forEach(function(th){
     th.onclick=function(){
@@ -504,6 +530,15 @@ function resetAll(){
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML="";
   apply();
+}
+function toggleDesc(){
+  const b=document.getElementById("descbox");
+  if(b.style.display==="block"){ b.style.display="none"; return; }
+  let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
+  h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
+  h+='<div class="drow"><b>一键标准</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内，可在标准之上叠加估值区间。点击一键按钮会清空 PE 条件。</span></div>';
+  b.innerHTML=h;
+  b.style.display="block";
 }
 buildHead();
 apply();
