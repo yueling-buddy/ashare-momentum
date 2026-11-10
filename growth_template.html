@@ -85,7 +85,7 @@
     <div class="filters" id="filters">
       <div class="fitem"><label>市值(亿) ≥</label><div class="inp"><input id="f_mcap_yi" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>营收均值(亿) ≥</label><div class="inp"><input id="f_rev_avg_yi" type="number" step="any" placeholder="不限"></div></div>
-      <div class="fitem"><label>净利均值(万) ≥</label><div class="inp"><input id="f_np_avg_wan" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>净利均值(亿) ≥</label><div class="inp"><input id="f_np_avg_yi" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>营收增速均值% ≥</label><div class="inp"><input id="f_rev_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>净利增速均值% ≥</label><div class="inp"><input id="f_np_yoy_avg" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>营收Q同比% ≥</label><div class="inp"><input id="f_rev_q_yoy" type="number" step="any" placeholder="不限"></div></div>
@@ -110,12 +110,12 @@
     <div class="pager" id="pager"></div>
     <div class="note">
       PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
-      口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
+      口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→亿元）；
       同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
       去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
       来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
       EPS 四期趋势口径（2026-11-10 快照）：单季 EPS = 相邻报告期累计 EPS 之差（2025Q4 = 2025年报 − 2025三季报、2026Q2 = 2026半年报 − 2026一季报、2026Q3 = 2026三季报 − 2026半年报；Q1 直接取一季报累计），同比基期为去年同季单季 EPS，基期≤0 或缺失视为不可判定、显示「—」且该期不参与星标。本次 5004 只中四期全可判定 2541 只（50.8%），四期全正且逐期抬高（⭐⭐⭐⭐ 持续增长）26 只。注意：各报告期加权股本可能变动，差分单季 EPS 为近似值；低基数会产生极端增速，请结合绝对值复核。<br>
-      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。<br>
+      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥0.1亿、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。<br>
       页面优化：默认每页 100 只（可在下方切换 50/100/200/500）；「代码」「名称」两列已冻结，横向滚动时保持可见；「行业」列默认隐藏，点「显示行业」展开为固定窄宽（超出省略，鼠标悬停看全称），再点「隐藏行业」收起以节省空间。
     </div>
   </div>
@@ -134,7 +134,7 @@ DATA.forEach(function(r){
     ? ('<span class="star">'+"⭐".repeat(n)+'</span>' + (n===4 ? " <span class='tagacc'>持续增长</span>" : ""))
     : '<span class="na">—</span>';
 });
-const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
+const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_yi:0.1, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
 const DESC = {
   "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
   "name": "证券简称，来自 rps.json；保留 XD（除息）等行情标记。",
@@ -143,7 +143,7 @@ const DESC = {
   "pe_ttm": "市盈率(TTM) = 总市值 ÷ 最近 12 个月归母净利润。腾讯行情 v[39]，已与财报 TTM 净利自算逐只核对（误差 <0.1%）。亏损或负值留空显示「—」；不参与默认标准，可用上方 PE 区间单独或叠加筛选。",
   "rev_avg_yi": "近三个完整财年（2023/2024/2025）营业总收入的算术平均，单位亿元；业绩报表原始单位为元。",
   "rev_yoy_avg": "近三年年报披露的营业总收入同比增长率的算术平均（%）；任一年缺失或无法计算则该项留空。",
-  "np_avg_wan": "近三个完整财年净利润的算术平均，单位万元；业绩报表原始单位为元。",
+  "np_avg_yi": "近三个完整财年净利润的算术平均，单位亿元；业绩报表原始单位为元。",
   "np_yoy_avg": "近三年年报披露的净利润同比增长率的算术平均（%）；亏损、低基数或重组可能产生极端值，为披露口径原值。",
   "rev_q_yoy": "最新季度（2026 三季报，1–9 月累计）营业总收入同比增长，取报表披露值。",
   "np_q_yoy": "最新季度（2026 三季报，1–9 月累计）净利润同比增长，取报表披露值。",
@@ -160,7 +160,7 @@ const COLS = [
   {k:"pe_ttm", t:"PE TTM", d:2},
   {k:"rev_avg_yi", t:"营收均值(亿)", d:1},
   {k:"rev_yoy_avg", t:"营收增速均值%", d:1, up:true},
-  {k:"np_avg_wan", t:"净利均值(万)", d:1},
+  {k:"np_avg_yi", t:"净利均值(亿)", d:2},
   {k:"np_yoy_avg", t:"净利增速均值%", d:1, up:true},
   {k:"rev_q_yoy", t:"营收Q同比%", d:1, up:true},
   {k:"np_q_yoy", t:"净利Q同比%", d:1, up:true},
@@ -204,7 +204,7 @@ function getFiltered(){
   const q=(document.getElementById("q").value||"").trim().toLowerCase();
   const mins={
     mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
-    np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
+    np_avg_yi:getMin("f_np_avg_yi"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
     np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
     np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy"),
     pe_ttm:getMin("f_pe_ttm"),
@@ -304,7 +304,7 @@ function manualFilter(){
   apply();
 }
 function resetAll(){
-  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm","f_eps_stars","f_eps_score"].forEach(function(id){ document.getElementById(id).value=""; });
+  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_yi","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm","f_eps_stars","f_eps_score"].forEach(function(id){ document.getElementById(id).value=""; });
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML="";
   apply();
@@ -314,7 +314,7 @@ function toggleDesc(){
   if(b.style.display==="block"){ b.style.display="none"; return; }
   let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
   h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
-  h+='<div class="drow"><b>默认标准（一键筛选）</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内。点击一键按钮会清空 PE 条件并自动套用以上阈值；点「筛选」按钮则只按面板当前输入生效，不改动任何输入值；星数与趋势分属附加筛选，不纳入默认标准，一键会清空这两项。</span></div>';
+  h+='<div class="drow"><b>默认标准（一键筛选）</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥0.1亿、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内。点击一键按钮会清空 PE 条件并自动套用以上阈值；点「筛选」按钮则只按面板当前输入生效，不改动任何输入值；星数与趋势分属附加筛选，不纳入默认标准，一键会清空这两项。</span></div>';
   b.innerHTML=h;
   b.style.display="block";
 }

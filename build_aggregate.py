@@ -45,6 +45,10 @@ for r in gd:
     r["eps_trend_score"] = v.get("score")
     r["eps_stars"] = v.get("stars", 0)
     r["eps_valid"] = v.get("valid", 0)
+    _nv = r.pop("np_avg_wan", None)
+    try:/n        r["np_avg_yi"] = (float(_nv) / 10000.0)
+    except (TypeError, ValueError):
+        r["np_avg_yi"] = None
 
 # 高成长筛选：营收同比均值>20 且 净利同比均值>20，按净利同比均值降序，最多 200
 hi = [r for r in gd if (fnum(r, "np_yoy_avg") or -1e9) > 20 and (fnum(r, "rev_yoy_avg") or -1e9) > 20]
