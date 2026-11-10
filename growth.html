@@ -55,6 +55,23 @@
   .tagstd{display:inline-block;background:#fde8e8;color:var(--up);font-size:12px;padding:1px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;}
   .note{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7;}
   code{background:#eef2f7;padding:1px 5px;border-radius:4px;}
+  /* 分页器 */
+  .pager{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px;font-size:13px;color:var(--muted);}
+  .pager button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer;}
+  .pager button:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
+  .pager button:disabled{opacity:.4;cursor:not-allowed;}
+  .pager button.cur{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pager input.pg{width:56px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px;text-align:center;}
+  .pager select{border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:13px;background:#fff;}
+  .pager .sep{color:var(--line);}
+  /* 冻结：代码、名称两列 */
+  th:nth-child(1),td:nth-child(1){position:sticky;left:0;z-index:2;background:var(--card);min-width:74px;max-width:74px;}
+  th:nth-child(2),td:nth-child(2){position:sticky;left:74px;z-index:2;background:var(--card);min-width:104px;max-width:104px;}
+  thead th:nth-child(1),thead th:nth-child(2){background:#eff6ff;z-index:4;}
+  tbody tr:hover td:nth-child(1),tbody tr:hover td:nth-child(2){background:#f7fafd;}
+  /* 行业列：默认隐藏，点按钮展开为固定窄宽+省略号，悬停看全称 */
+  th:nth-child(3),td:nth-child(3){display:none;}
+  table.show-ind th:nth-child(3),table.show-ind td:nth-child(3){display:table-cell;max-width:128px;width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -84,11 +101,13 @@
       <button class="btn primary" onclick="manualFilter()">筛选</button>
       <button class="btn std" onclick="oneClick()">⚡ 一键筛选（默认标准）</button>
       <button class="btn reset" onclick="resetAll()">重置</button>
+      <button class="btn info" id="btnIndustry" onclick="toggleIndustry()">显示行业</button>
       <button class="btn info" onclick="toggleDesc()">ⓘ 指标说明</button>
       <span class="cnt" id="cnt"></span>
     </div>
     <div id="descbox" class="descbox"></div>
-    <div class="tablescroll"><table><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
+    <div class="tablescroll"><table id="tbl"><thead><tr id="thead"></tr></thead><tbody id="tb"></tbody></table></div>
+    <div class="pager" id="pager"></div>
     <div class="note">
       PE TTM 口径：腾讯行情市盈率(TTM)，2026-11-09 实时快照，= 总市值 ÷ 最近 12 个月归母净利润；已与财报 TTM 净利自算逐只核对（样本误差 &lt;0.1%）。亏损或无值者留空显示「—」，设置 PE 区间时这些标的不满足条件、自动排除；可用上方「PE TTM ≥ / ≤」自定义估值区间。<br>
       口径：市值取 2026-11-09 实时行情总市值快照（腾讯行情，单位亿元；已剔除 ST/退市；原静态 mcap.csv 已停用）；营收=营业总收入、净利润=净利润（元，展示时营收→亿、净利→万元）；
@@ -96,7 +115,8 @@
       去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
       来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
       EPS 四期趋势口径（2026-11-10 快照）：单季 EPS = 相邻报告期累计 EPS 之差（2025Q4 = 2025年报 − 2025三季报、2026Q2 = 2026半年报 − 2026一季报、2026Q3 = 2026三季报 − 2026半年报；Q1 直接取一季报累计），同比基期为去年同季单季 EPS，基期≤0 或缺失视为不可判定、显示「—」且该期不参与星标。本次 5004 只中四期全可判定 2541 只（50.8%），四期全正且逐期抬高（⭐⭐⭐⭐ 持续增长）26 只。注意：各报告期加权股本可能变动，差分单季 EPS 为近似值；低基数会产生极端增速，请结合绝对值复核。<br>
-      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。
+      「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。<br>
+      页面优化：默认每页 100 只（可在下方切换 50/100/200/500）；「代码」「名称」两列已冻结，横向滚动时保持可见；「行业」列默认隐藏，点「显示行业」展开为固定窄宽（超出省略，鼠标悬停看全称），再点「隐藏行业」收起以节省空间。
     </div>
   </div>
 </div>
@@ -149,7 +169,7 @@ const COLS = [
   {k:"eps_trend_score", t:"EPS趋势分"},
   {k:"eps_stars", t:"持续增长", disp:"eps_stars_txt", html:true}
 ];
-let sortKey=null, sortDir=-1;
+let sortKey=null, sortDir=-1, pageSize=100, page=1, FILTERED=[];
 function escHtml(s){
   return String(s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m];});
 }
@@ -180,7 +200,7 @@ function getMin(id){
   const n=parseFloat(v);
   return isNaN(n)?null:n;
 }
-function apply(){
+function getFiltered(){
   const q=(document.getElementById("q").value||"").trim().toLowerCase();
   const mins={
     mcap_yi:getMin("f_mcap_yi"), rev_avg_yi:getMin("f_rev_avg_yi"),
@@ -206,11 +226,25 @@ function apply(){
       return (x-y)*sortDir;
     });
   }
+  return rows;
+}
+function apply(){
+  FILTERED=getFiltered();
+  page=1;
+  renderPage();
+}
+function renderPage(){
+  const total=FILTERED.length;
+  const pages=Math.max(1, Math.ceil(total/pageSize));
+  if(page<1) page=1; if(page>pages) page=pages;
+  const start=(page-1)*pageSize;
+  const slice=FILTERED.slice(start, start+pageSize);
   const tb=document.getElementById("tb");
-  tb.innerHTML = rows.map(function(r){
+  tb.innerHTML = slice.map(function(r){
     const tds=COLS.map(function(c){
       const raw=r[c.disp||c.k];
       if(raw===null||raw===undefined||raw==="") return '<td class="na">—</td>';
+      if(c.k==="industry"){ const tt=escHtml(raw); return '<td title="'+tt+'">'+tt+'</td>'; }
       const v = c.html ? raw : (c.d ? fmt(raw, c.d) : escHtml(raw));
       if(v===null) return '<td class="na">—</td>';
       if(c.up) return '<td class="up">'+v+'</td>';
@@ -218,7 +252,44 @@ function apply(){
     }).join("");
     return '<tr>'+tds+'</tr>';
   }).join("");
-  document.getElementById("cnt").textContent='显示 '+rows.length+' / 共 '+DATA.length+' 只';
+  renderPager(total, pages);
+  document.getElementById("cnt").textContent='显示 第 '+(start+1)+'–'+(start+slice.length)+' 条 / 共 '+total+' 条';
+}
+function renderPager(total, pages){
+  const el=document.getElementById("pager");
+  let h='<button onclick="gotoPage(1)"'+(page<=1?' disabled':'')+'>首页</button>';
+  h+='<button onclick="gotoPage('+(page-1)+')"'+(page<=1?' disabled':'')+'>上一页</button>';
+  const nums=[]; const add=function(n){ if(n>=1&&n<=pages) nums.push(n); };
+  add(1); for(let i=page-2;i<=page+2;i++) add(i); add(pages);
+  nums.sort(function(a,b){return a-b;});
+  let prev=0;
+  nums.forEach(function(n){
+    if(n-prev>1) h+='<span class="sep">…</span>';
+    h+='<button class="'+(n===page?'cur':'')+'" onclick="gotoPage('+n+')">'+n+'</button>';
+    prev=n;
+  });
+  h+='<button onclick="gotoPage('+(page+1)+')"'+(page>=pages?' disabled':'')+'>下一页</button>';
+  h+='<button onclick="gotoPage('+pages+')"'+(page>=pages?' disabled':'')+'>末页</button>';
+  h+='<span class="sep">|</span>第 <input class="pg" id="pgJump" type="number" min="1" max="'+pages+'" value="'+page+'" onkeydown="if(event.key===\'Enter\')gotoPage(this.value)"> / '+pages+' 页';
+  const opts=[[50,50],[100,100],[200,200],[500,500]];
+  h+='<span class="sep">|</span>每页 <select onchange="setPageSize(this.value)">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(pageSize===o[0]?' selected':'')+'>'+o[0]+'</option>';}).join('')+'</select> 条';
+  h+='<span class="sep">|</span>共 '+total+' 条';
+  el.innerHTML=h;
+}
+function gotoPage(n){
+  n=parseInt(n,10); if(isNaN(n)) return;
+  const pages=Math.max(1, Math.ceil(FILTERED.length/pageSize));
+  if(n<1) n=1; if(n>pages) n=pages;
+  page=n; renderPage();
+}
+function setPageSize(v){
+  pageSize=parseInt(v,10)||100; page=1; renderPage();
+}
+function toggleIndustry(){
+  const t=document.getElementById("tbl");
+  const b=document.getElementById("btnIndustry");
+  if(t.classList.contains("show-ind")){ t.classList.remove("show-ind"); b.textContent="显示行业"; }
+  else { t.classList.add("show-ind"); b.textContent="隐藏行业"; }
 }
 function oneClick(){
   document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
