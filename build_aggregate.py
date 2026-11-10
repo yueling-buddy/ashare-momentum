@@ -31,6 +31,21 @@ def fnum(r, k):
         return None
 
 gd = g["data"]
+
+# ---- EPS 4-quarter single-quarter YoY trend (from _screen/eps_trend.json) ----
+ET = os.path.join(SCREEN, "eps_trend.json")
+if not os.path.exists(ET):
+    raise RuntimeError("eps_trend.json missing: run _screen/eps_trend.py first")
+et = json.load(open(ET, encoding="utf-8"))["data"]
+if len(et) != len(gd):
+    raise RuntimeError("eps_trend count mismatch: %d vs %d" % (len(et), len(gd)))
+for r in gd:
+    v = et.get(str(r.get("code", "")).zfill(6), {})
+    r["eps_q_yoys"] = v.get("g", [None, None, None, None])
+    r["eps_trend_score"] = v.get("score")
+    r["eps_stars"] = v.get("stars", 0)
+    r["eps_valid"] = v.get("valid", 0)
+
 # 高成长筛选：营收同比均值>20 且 净利同比均值>20，按净利同比均值降序，最多 200
 hi = [r for r in gd if (fnum(r, "np_yoy_avg") or -1e9) > 20 and (fnum(r, "rev_yoy_avg") or -1e9) > 20]
 hi.sort(key=lambda r: fnum(r, "np_yoy_avg"), reverse=True)

@@ -31,6 +31,9 @@
   .btn.reset{background:#eef2f7;color:var(--ink);}
   .btn:hover{opacity:.9;}
   .btn.info{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .sep{color:var(--muted);font-weight:400;}
+  .tagacc{background:#fef3c7;color:#b45309;font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;white-space:nowrap;}
+  .star{white-space:nowrap;letter-spacing:1px;}
   .descbox{display:none;margin:0 0 12px;padding:12px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;}
   .dtitle{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;}
   .drow{display:flex;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:12px;line-height:1.6;}
@@ -59,7 +62,7 @@
   <div class="crumb"><a href="aggregate.html">A股研究终端</a> › 业绩快速增长（全量筛选）</div>
   <header>
     <h1>A股业绩快速增长 · 全量筛选<span id="stdmark"></span></h1>
-    <p>高成长扫描 · 数据日期 __GGEN__ · 全量 __GTOTAL__ 只标的（含全部指标）。手动填写条件后点「筛选」，或点「⚡ 一键筛选」直接套用默认标准。</p>
+    <p>高成长扫描 · 数据日期 __GGEN__ · 全量 __GTOTAL__ 只标的。新增 EPS 四期单季同比、趋势分与持续增长星标；手动填写条件后点「筛选」，或点「⚡ 一键筛选」直接套用默认标准。</p>
   </header>
   <div class="block">
     <div class="filters" id="filters">
@@ -73,6 +76,8 @@
       <div class="fitem"><label>EPS同比% ≥</label><div class="inp"><input id="f_eps_yoy" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>PE TTM ≥</label><div class="inp"><input id="f_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
       <div class="fitem"><label>PE TTM ≤</label><div class="inp"><input id="x_pe_ttm" type="number" step="any" placeholder="不限"></div></div>
+      <div class="fitem"><label>持续增长星数 ≥</label><div class="inp"><input id="f_eps_stars" type="number" step="1" min="0" max="4" placeholder="不限"></div></div>
+      <div class="fitem"><label>EPS趋势分 ≥</label><div class="inp"><input id="f_eps_score" type="number" step="any" min="0" max="100" placeholder="不限"></div></div>
     </div>
     <div class="bar">
       <input class="search" id="q" placeholder="搜索代码 / 名称 / 行业…" oninput="apply()">
@@ -90,12 +95,25 @@
       同比取报表披露「同比增长」（年报=全年同比，季报=1–9月累计同比）；EPS 同比=(最新季度累计EPS−去年同期累计EPS)/去年同期EPS；
       去年同期 EPS≤0 视为无法判定而剔除。近三年=2023/2024/2025 年报，任一年缺失或同比无法计算者剔除。
       来源：akshare 东财业绩报表。金融类（银行/券商/保险）未单独剔除，其营收口径不同请自行甄别。<br>
+      EPS 四期趋势口径（2026-11-10 快照）：单季 EPS = 相邻报告期累计 EPS 之差（2025Q4 = 2025年报 − 2025三季报、2026Q2 = 2026半年报 − 2026一季报、2026Q3 = 2026三季报 − 2026半年报；Q1 直接取一季报累计），同比基期为去年同季单季 EPS，基期≤0 或缺失视为不可判定、显示「—」且该期不参与星标。本次 5004 只中四期全可判定 2541 只（50.8%），四期全正且逐期抬高（⭐⭐⭐⭐ 持续增长）26 只。注意：各报告期加权股本可能变动，差分单季 EPS 为近似值；低基数会产生极端增速，请结合绝对值复核。<br>
       「业绩快速增长标准」= 市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%（与一键按钮一致）。<br>数据体检：EPS 同比因去年同期 EPS≤0 或缺失而无法判定者约占 21.6%，显示为空且不参与该项筛选；增速极端值来自亏损/低基数或重组，为披露口径原值。
     </div>
   </div>
 </div>
 <script>
 const DATA = __GJSON__;
+DATA.forEach(function(r){
+  const arr = r.eps_q_yoys || [null,null,null,null];
+  r.eps_trend_txt = arr.map(function(x){
+    if(x===null||x===undefined) return '<span class="na">—</span>';
+    const cls = x>0 ? "up" : "down";
+    return '<span class="'+cls+'">'+(x>0?"+":"")+Number(x).toFixed(1)+'%</span>';
+  }).join('<span class="sep"> / </span>');
+  const n = Number(r.eps_stars)||0;
+  r.eps_stars_txt = n>0
+    ? ('<span class="star">'+"⭐".repeat(n)+'</span>' + (n===4 ? " <span class='tagacc'>持续增长</span>" : ""))
+    : '<span class="na">—</span>';
+});
 const STD = {mcap_yi:50, rev_avg_yi:1, np_avg_wan:1000, rev_yoy_avg:20, np_yoy_avg:20, rev_q_yoy:20, np_q_yoy:20, eps_yoy:20};
 const DESC = {
   "code": "6 位 A 股代码。宇宙取 rps.json（已剔除 ST/退市），自动排除新三板/NEEQ。",
@@ -109,7 +127,10 @@ const DESC = {
   "np_yoy_avg": "近三年年报披露的净利润同比增长率的算术平均（%）；亏损、低基数或重组可能产生极端值，为披露口径原值。",
   "rev_q_yoy": "最新季度（2026 三季报，1–9 月累计）营业总收入同比增长，取报表披露值。",
   "np_q_yoy": "最新季度（2026 三季报，1–9 月累计）净利润同比增长，取报表披露值。",
-  "eps_yoy": "(2026Q3 累计 EPS − 2025Q3 累计 EPS) ÷ 2025Q3 累计 EPS ×100%；去年同期 EPS≤0 或缺失则无法判定、留空（约 21.6%）。"
+  "eps_yoy": "(2026Q3 累计 EPS − 2025Q3 累计 EPS) ÷ 2025Q3 累计 EPS ×100%；去年同期 EPS≤0 或缺失则无法判定、留空（约 21.6%）。",
+  "eps_trend_txt": "最近 4 个单季（2025Q4 / 2026Q1 / 2026Q2 / 2026Q3）的 EPS 同比增速，按时间从旧到新。单季 EPS = 相邻两个报告期累计 EPS 之差；同比基期为去年同季单季 EPS，基期≤0 或缺失记「—」。红色为正增长、绿色为负增长（A股口径）。",
+  "eps_trend_score": "EPS 趋势分（0–100）= round(40 × 正增长期数/4 + 60 × 增速逐期抬高的相邻对数/3)。缺失季度按不满足计；分数越高代表增长越连贯、越在加速。可在上方单独设「EPS趋势分 ≥」筛选。",
+  "eps_stars": "持续增长星标：从最新一季往前数，连续满足「同比>0 且比上一季增速更高」的季度数（0–4 星）。⭐⭐⭐⭐ = 四期全正且逐期抬高，即「持续增长」。星数与趋势分属附加筛选，不纳入一键默认标准。"
 };
 const COLS = [
   {k:"code", t:"代码"},
@@ -123,7 +144,10 @@ const COLS = [
   {k:"np_yoy_avg", t:"净利增速均值%", d:1, up:true},
   {k:"rev_q_yoy", t:"营收Q同比%", d:1, up:true},
   {k:"np_q_yoy", t:"净利Q同比%", d:1, up:true},
-  {k:"eps_yoy", t:"EPS同比%", d:1, up:true}
+  {k:"eps_yoy", t:"EPS同比%", d:1, up:true},
+  {k:"eps_trend_txt", t:"EPS单季同比(4期)", html:true},
+  {k:"eps_trend_score", t:"EPS趋势分"},
+  {k:"eps_stars", t:"持续增长", disp:"eps_stars_txt", html:true}
 ];
 let sortKey=null, sortDir=-1;
 function escHtml(s){
@@ -163,7 +187,8 @@ function apply(){
     np_avg_wan:getMin("f_np_avg_wan"), rev_yoy_avg:getMin("f_rev_yoy_avg"),
     np_yoy_avg:getMin("f_np_yoy_avg"), rev_q_yoy:getMin("f_rev_q_yoy"),
     np_q_yoy:getMin("f_np_q_yoy"), eps_yoy:getMin("f_eps_yoy"),
-    pe_ttm:getMin("f_pe_ttm")
+    pe_ttm:getMin("f_pe_ttm"),
+    eps_stars:getMin("f_eps_stars"), eps_trend_score:getMin("f_eps_score")
   };
   const maxs={pe_ttm:getMin("x_pe_ttm")};
   let rows=DATA.filter(function(r){
@@ -184,9 +209,9 @@ function apply(){
   const tb=document.getElementById("tb");
   tb.innerHTML = rows.map(function(r){
     const tds=COLS.map(function(c){
-      const raw=r[c.k];
+      const raw=r[c.disp||c.k];
       if(raw===null||raw===undefined||raw==="") return '<td class="na">—</td>';
-      const v = c.d ? fmt(raw, c.d) : escHtml(raw);
+      const v = c.html ? raw : (c.d ? fmt(raw, c.d) : escHtml(raw));
       if(v===null) return '<td class="na">—</td>';
       if(c.up) return '<td class="up">'+v+'</td>';
       return '<td>'+v+'</td>';
@@ -197,6 +222,7 @@ function apply(){
 }
 function oneClick(){
   document.getElementById("f_pe_ttm").value=""; document.getElementById("x_pe_ttm").value="";
+  document.getElementById("f_eps_stars").value=""; document.getElementById("f_eps_score").value="";
   for(const k in STD){ const el=document.getElementById("f_"+k); if(el) el.value=STD[k]; }
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML='<span class="tagstd">已套用标准</span>';
@@ -207,7 +233,7 @@ function manualFilter(){
   apply();
 }
 function resetAll(){
-  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm"].forEach(function(id){ document.getElementById(id).value=""; });
+  ["f_mcap_yi","f_rev_avg_yi","f_np_avg_wan","f_rev_yoy_avg","f_np_yoy_avg","f_rev_q_yoy","f_np_q_yoy","f_eps_yoy","f_pe_ttm","x_pe_ttm","f_eps_stars","f_eps_score"].forEach(function(id){ document.getElementById(id).value=""; });
   document.getElementById("q").value="";
   document.getElementById("stdmark").innerHTML="";
   apply();
@@ -217,7 +243,7 @@ function toggleDesc(){
   if(b.style.display==="block"){ b.style.display="none"; return; }
   let h='<div class="dtitle">指标口径速查（悬停任一表头也可查看单项说明 · 点击表头排序）</div>';
   h+=COLS.map(function(c){return '<div class="drow"><b>'+escHtml(c.t)+'</b><span>'+escHtml(DESC[c.k]||"—")+'</span></div>';}).join("");
-  h+='<div class="drow"><b>默认标准（一键筛选）</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内。点击一键按钮会清空 PE 条件并自动套用以上阈值；点「筛选」按钮则只按面板当前输入生效，不改动任何输入值。</span></div>';
+  h+='<div class="drow"><b>默认标准（一键筛选）</b><span>市值≥50亿 且 近三年营收均值≥1亿、净利均值≥1000万、营收/净利同比增速均值均≥20% 且 最新季度营收/净利/EPS 同比均≥20%；PE TTM 不在标准内。点击一键按钮会清空 PE 条件并自动套用以上阈值；点「筛选」按钮则只按面板当前输入生效，不改动任何输入值；星数与趋势分属附加筛选，不纳入默认标准，一键会清空这两项。</span></div>';
   b.innerHTML=h;
   b.style.display="block";
 }
