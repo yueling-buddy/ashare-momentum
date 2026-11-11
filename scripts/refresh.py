@@ -75,6 +75,7 @@ INDEX_HTML = ROOT / "index.html"
 ERROR_LOG = DATA_DIR / "error.log"
 KLINE_CACHE = DATA_DIR / "kline_cache.parquet"         # 运行时缓存（盘中用）
 KLINE_SEED = DATA_DIR / "kline_cache_seed.parquet"     # 提交到仓库的冷启动种子
+HOLIDAY_SNAPSHOT = False   # set by the non-trading-day guard in intraday/close
 LOCAL_KLINE_DIR = ROOT.parent / "rps_fip_package" / "data" / "kline"  # 本机已有缓存
 
 WINDOWS = (50, 120, 250)
@@ -1063,9 +1064,58 @@ def trade_date_for(now_bj: datetime):
     return None
 
 
-def apply_spot_to_frames(frames: dict, spot: pd.DataFrame, names: dict, now_bj: datetime):
+def _is_static_snapshot(frames: dict, spot: pd.DataFrame, now_bj: datetime) -> bool:
+    """Return True when the market-wide quote is a non-trading-day snapshot.
+
+    Primary rule: Sina embeds the real quote date. If it is not today, the market
+    is not publishing a current session and no synthetic "today" bar may be added.
+    Fallback rule: when a source has no reliable date, compare spot close+volume
+    with each symbol's latest cached bar; >99% identical across >=100 symbols is a
+    frozen prior-session snapshot. Fail-safe on errors: treat as a normal session.
+    """
+    try:
+        quote_ts = LAST_QUOTE_TIME.get("ts")
+        if quote_ts:
+            quote_date = datetime.strptime(quote_ts, "%Y-%m-%d %H:%M:%S").date()
+            if quote_date != now_bj.date():
+                print("[guard] quote date %s != today %s" % (quote_date, now_bj.date()))
+                return True
+        if spot is None or spot.empty or not frames:
+            return False
+        if not all(c in spot.columns for c in ("code", "最新价", "成交量")):
+            return False
+        s = spot.copy()
+        s["code"] = s["code"].astype(str).str.zfill(6)
+        s = s.set_index("code")
+        tot = same = 0
+        for code, df in frames.items():
+            if df is None or len(df) == 0 or code not in s.index:
+                continue
+            r = s.loc[code]
+            if isinstance(r, pd.DataFrame):
+                r = r.iloc[0]
+            try:
+                sc = float(r.get("最新价")); sv = float(r.get("成交量"))
+                lc = float(df["close"].iloc[-1]); lv = float(df["volume"].iloc[-1])
+            except Exception:
+                continue
+            if not (np.isfinite(sc) and np.isfinite(sv) and np.isfinite(lc) and np.isfinite(lv)):
+                continue
+            tot += 1
+            if abs(sc - lc) < 1e-6 and abs(sv - lv) < 1e-6:
+                same += 1
+        ratio = (same / tot) if tot else 0.0
+        if tot >= 100:
+            print("[guard] static-snapshot match: %d/%d = %.4f" % (same, tot, ratio))
+        return tot >= 100 and ratio > 0.99
+    except Exception as e:
+        print("[guard] static-snapshot check failed: %r" % (e,))
+        return False
+
+
+def apply_spot_to_frames(frames: dict, spot: pd.DataFrame, names: dict, now_bj: datetime, force_history: bool = False):
     """用实时行情更新每只"当天那根"。返回 (更新后的 frames, 计算日日期)。"""
-    trade_date = trade_date_for(now_bj)
+    trade_date = None if force_history else trade_date_for(now_bj)
     spot_map = {}
     if spot is not None and not spot.empty:
         for _, r in spot.iterrows():
@@ -1134,8 +1184,7 @@ def write_outputs(records, asof, source_desc, universe_count, spot_enhanced):
         if "history" in r:
             hist_map[r["code"]] = r.pop("history")
     if hist_map:
-        HISTORY_JSON.write_text(json.dumps(hist_map, ensure_ascii=False, separators=(",", ":")),
-                                encoding="utf-8")
+        _atomic_write_json(HISTORY_JSON, hist_map)
         print(f"已生成 {HISTORY_JSON}（{len(hist_map)} 只 K 线历史，懒加载）")
     fip_records = [{
         "code": r["code"], "name": r["name"],
@@ -1383,7 +1432,15 @@ def main():
     write_run_log(mode=args.mode, stage="spot_done", n_codes=len(frames))
 
     now_bj = datetime.now(BJ)
-    updated, calc_date = apply_spot_to_frames(frames, spot, names, now_bj)
+    # Non-trading-day guard for BOTH intraday and close. On holidays Sina returns
+    # the previous session as a frozen snapshot; never manufacture a bar for today.
+    global HOLIDAY_SNAPSHOT
+    HOLIDAY_SNAPSHOT = _is_static_snapshot(frames, spot, now_bj)
+    if HOLIDAY_SNAPSHOT:
+        _lc = [pd.Timestamp(fr["date"].iloc[-1]).date() for fr in frames.values() if len(fr)]
+        _last = max(_lc) if _lc else now_bj.date()
+        print("[guard] non-trading day: dropping synthetic bar %s; latest cache=%s" % (now_bj.date(), _last))
+    updated, calc_date = apply_spot_to_frames(frames, spot, names, now_bj, force_history=HOLIDAY_SNAPSHOT)
     # 必须在 RPS 横截面与板块聚合之前剔除风险警示股；名称以当日实时行情为准。
     updated, risk_excluded = filter_risk_warning_frames(updated, names)
     if watch_codes is not None and risk_excluded:
@@ -1392,7 +1449,7 @@ def main():
 
     # 防回退守卫：若实时行情拉取失败导致 asof 比已发布数据更旧，则跳过写盘，
     # 避免云端把已正确的当日数据回退到缓存里的旧交易日（如 08-28）。
-    if RPS_JSON.exists():
+    if RPS_JSON.exists() and not HOLIDAY_SNAPSHOT:
         try:
             prev = json.loads(RPS_JSON.read_text(encoding="utf-8")).get("meta", {}).get("asof")
             if prev and asof < prev:
@@ -1415,7 +1472,10 @@ def main():
             out = []
             for code, d in updated.items():
                 out.append(d[["date", "open", "high", "low", "close", "volume", "code"]])
-            pd.concat(out, ignore_index=True).to_parquet(KLINE_CACHE, index=False)
+            _merged = pd.concat(out, ignore_index=True)
+            _tmp = str(KLINE_CACHE) + ".tmp"
+            _merged.to_parquet(_tmp, index=False)
+            os.replace(_tmp, KLINE_CACHE)   # atomic: never leave a truncated cache
             print(f"收盘定稿：已写回缓存 {KLINE_CACHE}（{len(out)} 只）")
         except Exception as e:
             log_err(f"写回缓存失败: {repr(e)[:200]}")

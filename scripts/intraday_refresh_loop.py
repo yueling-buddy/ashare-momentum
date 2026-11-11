@@ -29,8 +29,19 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
-GIT = Path(r"C:/Users/yueling.liu/.workbuddy/binaries/PortableGit/versions/1.2.0/cmd/git.exe")
-SSH = Path(r"C:/Users/yueling.liu/.workbuddy/binaries/PortableGit/versions/1.2.0/usr/bin/ssh.exe")
+
+
+def _portable_git_tool(relative_path: str) -> Path:
+    """Resolve the newest installed WorkBuddy PortableGit version dynamically."""
+    versions = Path.home() / ".workbuddy" / "binaries" / "PortableGit" / "versions"
+    candidates = [p / relative_path for p in versions.glob("*") if (p / relative_path).exists()]
+    if not candidates:
+        raise FileNotFoundError("PortableGit tool not found: %s" % relative_path)
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+GIT = _portable_git_tool("cmd/git.exe")
+SSH = _portable_git_tool("usr/bin/ssh.exe")
 KEY = ROOT.parent / ".workbuddy" / "github_a_share_deploy_key"
 PY = Path(r"C:/Users/yueling.liu/.workbuddy/binaries/python/envs/refresh_ashare/Scripts/python.exe")
 REFRESH = ROOT / "scripts" / "refresh.py"

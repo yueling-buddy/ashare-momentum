@@ -67,9 +67,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/kline_cache.parquet
-          key: kline-v3-${{ github.run_id }}-${{ github.run_attempt }}
+          # v4: invalidate caches that may contain synthetic holiday bars; seed is clean.
+          key: kline-v4-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            kline-v3-
+            kline-v4-
 
       - name: Seed cache if missing
         run: |
