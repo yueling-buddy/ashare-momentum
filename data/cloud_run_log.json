@@ -1,6 +1,6 @@
 {
-  "ts": "2026-11-16 14:06:02",
-  "host": "cloud",
+  "ts": "2026-11-16 14:16:36",
+  "host": "local",
   "spot_attempts": [
     {
       "src": "sina_raw",
