@@ -1,14 +1,14 @@
 {
-  "ts": "2026-11-20 09:01:21",
-  "host": "local",
+  "ts": "2026-11-20 09:02:49",
+  "host": "cloud",
   "spot_attempts": [
     {
       "src": "sina_raw",
-      "rows": 983
+      "rows": 5
     }
   ],
   "spot_source": "sina_raw",
-  "spot_rows": 983,
+  "spot_rows": 5,
   "mode": "intraday",
   "stage": "written",
   "asof": "2026-11-19",
