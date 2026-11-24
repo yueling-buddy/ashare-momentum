@@ -1,17 +1,22 @@
 {
-  "ts": "2026-11-24 13:16:30",
-  "host": "local",
+  "ts": "2026-11-24 13:19:10",
+  "host": "cloud",
   "spot_attempts": [
     {
       "src": "sina_raw",
-      "rows": 5009
+      "rows": 0
+    },
+    {
+      "src": "akshare",
+      "rows": 0
     }
   ],
-  "spot_source": "sina_raw",
-  "spot_rows": 5009,
+  "spot_source": null,
+  "spot_rows": 0,
   "mode": "intraday",
-  "stage": "written",
-  "asof": "2026-11-24",
-  "guard_skipped": false,
-  "n_records": 5005
+  "stage": "guard_skip",
+  "asof": "2026-11-23",
+  "published_asof": "2026-11-24",
+  "guard_skipped": true,
+  "note": "实时行情缺失，跳过写盘以防回退"
 }
